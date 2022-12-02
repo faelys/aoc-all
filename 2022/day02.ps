@@ -1,0 +1,96 @@
+%!PS
+% Usage:
+% gs -q- -sDEVICE=png16m -o- -r300 -dDownScaleFactor=3 day02.ps <day02.txt | display
+
+/str_to_int {
+  0 exch { exch 10 mul add 48 sub } forall
+} bind def
+
+/int_to_str {
+  % number
+  1 10
+  { % number length upper-bound
+    2 index 1 index lt { exit } if
+    exch 1 add exch 10 mul } loop
+  pop dup string exch 1 sub
+  { % number string index
+    2 copy 1 sub 5 1 roll exch
+    % next_index number string string index
+    3 index 10 mod 48 add
+    % next_index number string string index digit
+    put
+    % next_index number next_string
+    3 1 roll 10 idiv
+    % next_string next_index next_number
+    dup 0 eq { pop pop exit } if
+    % next_string next_index next_number
+    3 1 roll
+    % next_nubmer next_string next_index
+  } loop
+} bind def
+
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+/datafile (%stdin) (r) file def
+
+/data [
+  {
+    datafile 100 string readline
+    not {pop exit} if
+    % line
+    dup 0 get 64 sub exch
+    % abc-mapped-to-123 line
+    2 get 87 sub
+    % abc-mapped-to-123 xyz-mapped-to-123
+    2 array astore
+  } loop
+] def
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+0 data {
+  % prev-score cur-item
+  aload pop
+  % prev-score other-choice my-choice
+  0
+  3 copy pop eq { 3 add } if
+  3 copy pop sub 3 add 3 mod 2 eq { 6 add } if
+  % prev-score other-choice my-choice outcome-score
+  add exch pop
+  % prev-score cur-total-score
+  add
+} forall
+int_to_str show
+
+(Second Puzzle: )
+72 664 moveto show
+0 data {
+  % prev-score cur-item
+  aload pop exch
+  % prev-score outcome-type other-choice
+  %   Here we use that win is +1 in choice numeric values and losing is -1,
+  %   wrapping around in 1 .. 3
+  %   So my-choice = wrap(other-choice + outcome-type - 2)
+  %   with wrap(x) = ((x - 1) mod 3) + 1
+  %   so my-choice = (other-choice + outcome-type mod 3) + 1
+  1 index add 3 mod 1 add
+  % prev-score outcome-type my-choice
+  exch 1 sub 3 mul
+  % prev-score my-choice outcome-score
+  add
+  % prev-score cur-total-score
+  add
+} forall
+int_to_str show
+
+showpage
+quit
