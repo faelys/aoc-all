@@ -1,0 +1,152 @@
+%!PS
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day03.ps <day03.txt | display
+
+/str_to_int {
+  0 exch { exch 10 mul add 48 sub } forall
+} bind def
+
+/int_to_str {
+  % number
+  1 10
+  { % number length upper-bound
+    2 index 1 index lt { exit } if
+    exch 1 add exch 10 mul } loop
+  pop dup string exch 1 sub
+  { % number string index
+    2 copy 1 sub 5 1 roll exch
+    % next_index number string string index
+    3 index 10 mod 48 add
+    % next_index number string string index digit
+    put
+    % next_index number next_string
+    3 1 roll 10 idiv
+    % next_string next_index next_number
+    dup 0 eq { pop pop exit } if
+    % next_string next_index next_number
+    3 1 roll
+    % next_nubmer next_string next_index
+  } loop
+} bind def
+
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+/datafile (%stdin) (r) file def
+
+/data [
+  {
+    datafile 100 string readline
+    not {pop exit} if
+    % line
+    dup length dup dict exch 2 idiv 0 4 3 roll
+    % data-dict half-length 0 line
+    {
+      % data-dict half-length index string-element
+      dup 90 le { 64 sub 26 add } if
+      dup 97 ge { 96 sub } if
+      % data-dict half-length index element-priority
+      3 copy pop gt { 1 } { 1000 } ifelse
+      % data-dict half-length index element-priority element-index
+      4 index 2 index known
+      { 4 index 2 index get }
+      { 0 }
+      ifelse
+      add
+      % data-dict half-length index element-priority new-value
+      4 index 3 1 roll put
+      % new-data-dict half-length index
+      1 add
+      % new-data-dict half-length new-index
+    } forall
+    pop pop
+  } loop
+] def
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+0 data {
+  % accumulator cur-dict
+  0 exch
+  {
+    % result cur-key cur-value
+    dup 1000 idiv exch 1000 mod
+    % result cur-key first-count second-count
+    mul 0 gt
+    { exch 100 mul add }
+    { pop }
+    ifelse
+    % new-result
+  } forall
+  % accumulator cur-result
+  add
+} forall
+int_to_str show
+
+(Second Puzzle: )
+72 664 moveto show
+0 0 [ 52 { 0 } repeat ] data {
+  % accumulator index global-track-array cur-dict
+  [ 52 { 0 } repeat ] exch
+  {
+    % local-track-array cur-key cur-value
+    pop 1 sub
+    % local-track-array cur-index
+    1 index exch
+    1 put
+    % updated-local-track-array
+  } forall
+  % accumulator index global-track-array local-track-array
+  0 1 51 {
+    % global-track-array local-track-array cur-index
+    2 index 1 index get
+    % global-track-array local-track-array cur-index prev-global-value
+    2 index 2 index get add
+    % global-track-array local-track-array cur-index updated-global-value
+    3 index 3 1 roll put
+    % updated-global-track-array local-track-array
+  } for
+  % accumulator index updated-global-track-array local-track-array
+  pop
+  % accumulator index updated-global-track-array
+  exch 1 add exch
+  % accumulator updated-index updated-global-track-array
+  1 index 3 mod 0 eq
+  {
+    % accumulator updated-index updated-global-track-array
+    0 1 51 {
+      % accumulator updated-index updated-global-track-array cur-index
+      2 copy get
+      % accumulator updated-index updated-global-track-array cur-index cur-value
+      3 eq {
+        % accumulator updated-index updated-global-track-array cur-index
+        dup 1 add
+        % accumulator updated-index updated-global-track-array cur-index cur-pri
+        5 4 roll add
+        % updated-index updated-global-track-array cur-index updated-acc
+        4 1 roll
+        % updated-acc updated-index updated-global-track-array cur-index
+      } if
+      % updated-accumulator updated-index updated-global-track-array cur-index
+      pop
+    } for
+    % updated-accumulator updated-index updated-global-track-array
+    pop [ 52 { 0 } repeat ]
+    % updated-accumulator updated-index cleared-global-track-array
+  } if
+} forall
+% accumulator last-index last-global-track-array
+pop pop
+int_to_str show
+
+showpage
+quit
+
