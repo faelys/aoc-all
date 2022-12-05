@@ -1,0 +1,298 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day05.ps <day05.txt | display
+
+/str_to_int {
+  0 exch { exch 10 mul add 48 sub } forall
+} bind def
+
+/int_to_str {
+  % number
+  1 10
+  { % number length upper-bound
+    2 index 1 index lt { exit } if
+    exch 1 add exch 10 mul } loop
+  pop dup string exch 1 sub
+  { % number string index
+    2 copy 1 sub 5 1 roll exch
+    % next_index number string string index
+    3 index 10 mod 48 add
+    % next_index number string string index digit
+    put
+    % next_index number next_string
+    3 1 roll 10 idiv
+    % next_string next_index next_number
+    dup 0 eq { pop pop exit } if
+    % next_string next_index next_number
+    3 1 roll
+    % next_nubmer next_string next_index
+  } loop
+} bind def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% line-array line -> updated-line-array
+/parse-init {
+  1 4 2 index length 1 sub {
+    % line-array line char-index
+    2 copy get
+    % line-array line char-index cur-char
+    exch 4 idiv
+    % line-array line cur-char col-index
+    exch 3 index 3 1 roll put
+    % updated-line-array line
+  } for
+  % updated-line-array line
+  pop
+  % updated-line-array
+} bind def
+
+% array-of-arrays line-index col-index -> array-of-arrays selected-char
+/get-cell {
+  3 copy pop get
+  % array-of-arrays line-index col-index selected-line
+  exch get
+  % array-of-arrays line-index selected-char
+  exch pop
+  % array-of-arrays selected-char
+} bind def
+
+% array-of-arrays line-index col-index selected-char -> updated-array-of-arrays
+/put-cell {
+  % array-of-arrays line-index col-index selected-char
+  3 index 3 index get
+  % array-of-arrays line-index col-index selected-char prev-line
+  dup 4 2 roll put
+  % array-of-arrays line-index updated-line
+  2 index 4 1 roll put
+  % updated-array-of-arrays
+} bind def
+
+% array-of-arrays col-index -> array-of-arrays line-count
+/stack-height {
+  0 1 3 index length 1 sub {
+    % array-of-arrays col-index line-index
+    3 copy exch get-cell exch pop
+    % array-of-arrays col-index line-index selected-char
+    32 eq { exit } if
+    % array-of-arrays col-index line-index
+    pop
+  } for
+  % array-of-arrays col-index line-count
+  exch pop
+  % array-of-arrays line-count
+} bind def
+
+% (move X from Y to Z) -> X Y Z
+/parse-move {
+  % (move X from Y to Z)
+  (move ) anchorsearch
+  not { quit } if pop
+  % (X from Y to Z)
+  ( from ) search
+  not { quit } if
+  % (Y to Z) ( from ) (X)
+  str_to_int exch pop exch
+  % X (Y to Z)
+  ( to ) search
+  not { quit } if
+  str_to_int exch pop exch
+  % X Y (Z)
+  str_to_int
+  % X Y Z
+} bind def
+
+% array-of-arrays X Y Z -> updated-array-of-arrays
+/run-move-1 {
+  1 sub exch 1 sub exch
+  % array-of-array count col-source col-dest
+  3 2 roll {
+    % array-of-array col-source col-dest
+    3 2 roll
+    % col-source col-dest array-of-array
+    2 index stack-height 1 sub
+    % col-source col-dest array-of-array line-source
+    dup 3 1 roll
+    % col-source col-dest line-source array-of-array line-source
+    4 index get-cell
+    % col-source col-dest line-source array-of-array moved-char
+    3 1 roll exch 4 index
+    % col-source col-dest moved-char array-of-array line-source col-source
+    32 put-cell
+    % col-source col-dest moved-char array-of-array
+    2 index stack-height
+    % col-source col-dest moved-char array-of-array line-dest
+    3 index 3 index put-cell
+    % col-source col-dest moved-char updated-array-of-array
+    4 1 roll pop
+    % updated-array-of-array col-source col-dest
+  } repeat
+  % updated-array-of-array col-source col-dest
+  pop pop
+  % updated-array-of-array
+} bind def
+
+% array-of-arrays X Y Z -> updated-array-of-arrays
+/run-move-2 {
+  1 sub exch 1 sub exch
+  % array-of-array count col-source col-dest
+  3 index 2 index stack-height exch pop
+  % array-of-array count col-source col-dest source-height
+  3 index sub
+  % array-of-array count col-source col-dest first-source-line
+  4 index 2 index stack-height exch pop
+  % array-of-array count col-source col-dest first-source-line dest-height
+  5 4 roll {
+    % array-of-array col-source col-dest line-source line-dest
+    5 4 roll
+    % col-source col-dest line-source line-dest array-of-array
+    2 index 5 index get-cell exch
+    % col-source col-dest line-source line-dest moved-char array-of-array
+    3 index 6 index 32 put-cell
+    % col-source col-dest line-source line-dest moved-char updtd-array-of-array
+    2 index 5 index 4 3 roll put-cell
+    % col-source col-dest line-source line-dest updtd-array-of-array
+    5 1 roll
+    % updated-array-of-array col-source col-dest line-source line-dest
+    exch 1 add exch 1 add
+    % updtd-array-of-array col-source col-dest updtd-line-source updtd-line-dest
+  } repeat
+  pop pop pop pop
+  % updated-array-of-array
+} bind def
+
+/data-width 12 def
+/data-height 50 def
+
+[ data-height { [ data-width { 32 } repeat ] } repeat ]
+  {
+    datafile 100 string readline
+    not {pop exit} if
+    % array-of-arrays line
+    dup 1 get 49 eq { pop exit } if
+    % array-of-arrays stack-line
+    [ data-width { 32 } repeat ] exch parse-init
+    % array-of-arrays line-array
+    exch aload
+    % new-line-array line-array-0 line-array-1 … line-array-n-1 array-of-arrays
+    exch pop
+    % new-line-array line-array-0 line-array-1 … line-array-n-2 array-of-arrays
+    astore
+    % updated-array-of-arrays
+  } loop
+% init-array-of-arrays
+  dup {
+    {
+      stderr exch write
+    } forall
+    stderr 10 write
+  } forall
+% init-array-of-arrays
+  datafile 100 string readline
+  pop pop
+% init-array-of-arrays
+[
+  {
+    datafile 100 string readline
+    not {pop exit} if
+    % line
+    parse-move
+    % X Y Z
+    3 array astore
+    % move
+  } loop
+]
+% init-array-of-arrays move-list
+
+/rebuild {
+  [ 1 index { } forall ]
+  exch pop
+} bind def
+
+/deep-rebuild {
+  [ 1 index { rebuild } forall ]
+  exch pop
+} bind def
+
+2 copy rebuild exch deep-rebuild exch
+% init-array-of-arrays move-list copy-of-array-of-arrays move-list-copy
+
+{
+  aload pop
+  run-move-1
+} forall
+
+% init-array-of-arrays move-list final-array-of-arrays
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+% array-of-arrays
+data-width string
+0 1 data-width 1 sub {
+  % array-of-arrays top-line cur-col
+  2 index 1 index stack-height
+  % array-of-arrays top-line cur-col array-of-arrays line-count
+  dup 0 eq { pop data-height } if
+  1 sub
+  % array-of-arrays top-line cur-col array-of-arrays cur-line
+  2 index get-cell
+  % array-of-arrays top-line cur-col array-of-arrays cur-char
+  exch pop
+  % array-of-arrays top-line cur-col cur-char
+  2 index 4 1 roll put
+  % array-of-arrays updated-top-line
+} for
+show
+
+% reset
+pop
+2 copy rebuild exch deep-rebuild exch
+% init-array-of-arrays move-list copy-of-array-of-arrays move-list-copy
+
+{
+  aload pop
+  run-move-2
+} forall
+
+% init-array-of-arrays move-list final-array-of-arrays
+
+(Second Puzzle: )
+72 664 moveto show
+% array-of-arrays
+data-width string
+0 1 data-width 1 sub {
+  % array-of-arrays top-line cur-col
+  2 index 1 index stack-height
+  % array-of-arrays top-line cur-col array-of-arrays line-count
+  dup 0 eq { pop data-height } if
+  1 sub
+  % array-of-arrays top-line cur-col array-of-arrays cur-line
+  2 index get-cell
+  % array-of-arrays top-line cur-col array-of-arrays cur-char
+  exch pop
+  % array-of-arrays top-line cur-col cur-char
+  2 index 4 1 roll put
+  % array-of-arrays updated-top-line
+} for
+show
+
+showpage
+quit
