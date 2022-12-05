@@ -296,3 +296,16 @@ show
 
 showpage
 quit
+
+% Thinking back about these solutions, I realize I went through them with
+% a kind of "functional" mindset, with immutable objects and functions
+% returns a new object built from the old one, while PostScript primitives
+% have more of a "referential" paradigm, e.g. "put" functions pop the
+% composite from the stack and modify it in place, leaving it to be accessed
+% from another reference. There are several places where fighting the
+% PostScript doesn't go well, e.g. with the rebuild and deep-rebuild.
+%
+% I should also probably have used a linear array for storage, the lack of
+% clarity of copies vs references was compounded by the use of an array of
+% arrays, instead of using a linear array and modular arithmetic to map
+% 2D coordinates into a linear index.
