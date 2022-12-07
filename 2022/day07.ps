@@ -1,0 +1,214 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day07.ps <day07.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/new-dir { 100 dict } bind def
+/root new-dir def
+
+% read data
+root
+  {
+    datafile 100 string readline
+    not { pop exit } if
+    % cur-dir line
+    ($ ) anchorsearch
+    { pop
+      % cur-dir cmd-line
+      (cd ) anchorsearch
+      { pop
+        % cur-dir cd-arg
+        dup (..) eq
+        { pop pop }
+        { dup (/) eq not
+          { 1 index exch get }
+          { pop }
+          ifelse
+        }
+        ifelse
+      }
+      { pop }
+      ifelse
+    }
+    { % cur-dir data-line
+      (dir ) anchorsearch
+      { pop
+        % cur-dir new-dir-name
+        1 index exch new-dir put
+      }
+      { ( ) search
+        { exch pop
+          % cur-dir new-file-name new-file-size
+          2 index 3 1 roll put
+        }
+        { quit }
+        ifelse
+      }
+      ifelse
+    }
+    ifelse
+  } loop
+
+% (string1) (string2) -> (string1string2)
+/concat {
+  % (string1) (string2)
+  dup length 2 index length add string
+  % (string1) (string2) (blank)
+  dup 0 4 index putinterval
+  % (string1) (string2) (string1blank)
+  3 2 roll length
+  % (string2) (string1blank) string1-length
+  3 2 roll 2 index 4 1 roll putinterval
+  % (string1string2)
+} bind def
+
+% dir-dict -> total-size
+/dir-size {
+  0 exch
+  {
+    % cur-total element-name element-value
+    exch pop
+    % cur-total element-value
+    dup type /dicttype eq
+    {
+      % cur-total dir-value
+      dir-size add
+    }
+    {
+      % cur-total file-value
+      cvi add
+    }
+    ifelse
+  } forall
+} bind def
+
+% cur-dir-name dir-dict -> ø
+/dump-data {
+  {
+    % cur-dir-name element-name element-value
+    dup type /dicttype eq
+    {
+      % cur-dir-name dir-name dir-value
+      exch 100 string cvs 2 index exch concat (/) concat
+      % cur-dir-name dir-value full-dir-name
+      dup stderr exch writestring
+      stderr ( -> ) writestring
+      % cur-dir-name dir-value full-dir-name
+      1 index dir-size 100 string cvs
+      stderr exch writestring
+      stderr 10 write
+      % cur-dir-name dir-value full-dir-name
+      exch dump-data
+    }
+    {
+      % cur-dir-name file-name file-size
+      exch 100 string cvs 2 index exch concat
+      % cur-dir-name file-size full-file-name
+      ( -> ) concat exch concat
+      % cur-dir-name line
+      stderr exch writestring stderr 10 write
+    }
+    ifelse
+  } forall
+  pop
+} bind def
+
+% dump data
+% (/) root dump-data
+
+% current-sum dir-dict -> updated-sum
+/first-sum {
+  % prev-sum dir-dict
+  dup dir-size
+  % prev-sum dir-dict dir-size
+  dup 100000 le
+  { 3 2 roll add exch }
+  { pop }
+  ifelse
+  % updated-sum dir-dict
+  {
+    % updated-sum element-name element-value
+    exch pop
+    % updated-sum element-value
+    dup type /dicttype eq
+    { first-sum }
+    { pop }
+    ifelse
+  } forall
+  % updated-sum
+} bind def
+
+% size-needed best-name best-size cur-name cur-dict
+%    -> size-needed updated-best-name updated-best-size
+/second-iter {
+  dup dir-size
+  % size-needed best-name best-size cur-name cur-dict cur-size
+  5 index 1 index le
+  % size-needed best-name best-size cur-name cur-dict cur-size cur-size-enough?
+  4 index 2 index gt and
+  % size-needed best-name best-size cur-name cur-dict cur-size cur-is-best?
+  { 3 copy exch pop 5 2 roll 7 5 roll pop pop } if
+  % size-needed updated-best-name updated-best-size cur-name cur-dict cur-size
+  pop
+  {
+    % size-needed best-name best-size cur-name element-name element-value
+    dup type /dicttype eq
+    {
+      exch 2 index exch
+      % size-needed best-name best-size cur-name element-value cur-name element-name
+      100 string cvs concat (/) concat
+      % size-needed best-name best-size cur-name element-value full-element-name
+      exch 3 2 roll
+      % size-needed best-name best-size full-element-name element-value cur-name
+      6 1 roll
+      % cur-name size-needed best-name best-size full-element-name element-value
+      second-iter
+      % cur-name size-needed updated-best-name updated-best-size
+      4 3 roll
+      % size-needed updated-best-name updated-best-size cur-name
+    }
+    { pop pop }
+    ifelse
+  } forall
+  pop
+} bind def
+
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+0 root first-sum
+10 string cvs show
+
+(Second Puzzle: )
+72 664 moveto show
+17 root dir-size
+% total-size
+dup 70000000 exch sub
+% total-size free-size
+30000000 exch sub
+% total-size size-needed
+exch (/) exch (/) root second-iter
+% size-needed best-name best-size
+15 string cvs show
+
+showpage
+quit
