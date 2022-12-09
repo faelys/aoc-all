@@ -1,0 +1,228 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day08.ps <day4.txt | display
+
+% array new-item -> new-array
+/append {
+  exch aload length
+  % new-item item-0 item-1 ... item-n-1 n
+  dup dup 2 add exch 1 add roll
+  % item-0 item-1 ... item-n-1 n new-item
+  exch
+  % item-0 item-1 ... item-n-1 new-item n
+  1 add array astore
+} bind def
+
+% line-count col-count data-array dx dy x y -> is-visible?
+/is-visible {
+  % line-count col-count data-array dx dy x y
+  dup 6 index mul 2 index add
+  % line-count col-count data-array dx dy x y offset
+  5 index exch get
+  % line-count col-count data-array dx dy x y ref-height
+  5 1 roll
+  % line-count col-count data-array ref-height dx dy x y
+  {
+    2 index add
+    exch
+    3 index add
+    exch
+    % line-count col-count data-array ref-height dx dy updated-x updated-y
+    false
+    % line-count col-count data-array ref-height dx dy x y loop-terminated?
+    2 index 0 lt or  % x < 0
+    1 index 0 lt or  % y < 0
+    2 index 8 index ge or % x >= col-count
+    1 index 9 index ge or % y >= line-count
+    % line-count col-count data-array ref-height dx dy x y loop-terminated?
+    { pop pop pop pop pop pop pop pop true exit } if
+    % line-count col-count data-array ref-height dx dy x y
+    dup 7 index mul 2 index add
+    % line-count col-count data-array ref-height dx dy x y offset
+    6 index exch get
+    % line-count col-count data-array ref-height dx dy x y cur-height
+    5 index ge
+    % line-count col-count data-array ref-height dx dy x y is-hiding?
+    { pop pop pop pop pop pop pop pop false exit } if
+  } loop
+} bind def
+
+% line-count col-count data-array x y -> is-visible?
+/is-visible-4 {
+  false
+  % line-count col-count data-array x y false
+  6 copy pop  0 -1  4 2 roll  is-visible or
+  % line-count col-count data-array x y visible-from-top?
+  6 copy pop  0  1  4 2 roll  is-visible or
+  % line-count col-count data-array x y visible-from-top-or-bottom?
+  6 copy pop  -1 0  4 2 roll  is-visible or
+  % line-count col-count data-array x y visible-from-top-or-bottom-or-left?
+  6 copy pop   1 0  4 2 roll  is-visible or
+  % line-count col-count data-array x y is-visible?
+  6 1 roll
+  % is-visible? line-count col-count data-array x y
+  pop pop pop pop pop
+  % is-visible?
+} bind def
+
+% line-count col-count data-array dx dy x y -> visible-count
+/visible-count {
+  % line-count col-count data-array dx dy x y
+  dup 6 index mul 2 index add
+  % line-count col-count data-array dx dy x y offset
+  5 index exch get
+  % line-count col-count data-array dx dy x y ref-height
+  0 6 2 roll
+  % line-count col-count data-array ref-height counter dx dy x y
+  {
+    % line-count col-count data-array ref-height count dx dy prev-x prev-y
+    2 index add
+    exch
+    3 index add
+    exch
+    % line-count col-count data-array ref-height count dx dy x y
+    false
+    % line-count col-count data-array ref-height count dx dy x y loop-finished?
+    2 index 0 lt or  % x < 0
+    1 index 0 lt or  % y < 0
+    2 index 9 index ge or % x >= col-count
+    1 index 10 index ge or % y >= line-count
+    % line-count col-count data-array ref-height count dx dy x y loop-finished?
+    { pop pop pop pop
+      % line-count col-count data-array ref-height count
+      5 1 roll
+      % count line-count col-count data-array ref-height
+      pop pop pop pop
+      % count
+      exit
+    } if
+    % line-count col-count data-array ref-height prev-count dx dy x y
+    5 4 roll 1 add 5 1 roll
+    % line-count col-count data-array ref-height count dx dy x y
+    dup 8 index mul 2 index add
+    % line-count col-count data-array ref-height count dx dy x y offset
+    7 index exch get
+    % line-count col-count data-array ref-height count dx dy x y cur-height
+    6 index ge
+    % line-count col-count data-array ref-height count dx dy x y is-hiding?
+    { pop pop pop pop
+      % line-count col-count data-array ref-height count
+      5 1 roll
+      % count line-count col-count data-array ref-height
+      pop pop pop pop
+      % count
+      exit
+    } if
+  } loop
+} bind def
+
+% line-count col-count data-array x y -> scenic-score
+/scenic-score {
+  1
+  % line-count col-count data-array x y 1
+  6 copy pop  0 -1  4 2 roll  visible-count mul
+  % line-count col-count data-array x y top
+  6 copy pop  0  1  4 2 roll  visible-count mul
+  % line-count col-count data-array x y top*bottom
+  6 copy pop  -1 0  4 2 roll  visible-count mul
+  % line-count col-count data-array x y top*bottom*left
+  6 copy pop   1 0  4 2 roll  visible-count mul
+  % line-count col-count data-array x y score
+  6 1 roll
+  % score line-count col-count data-array x y
+  pop pop pop pop pop
+  % score
+} bind def
+
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+0 0 array {
+  % line-count data-array
+  datafile 120 string readline
+  not { pop exit } if
+  % line-count data-array line
+  {
+    % line-count data-array char
+    48 sub
+    append
+  } forall
+  % line-count updated-data-array
+  exch 1 add exch
+  % updated-line-count updated-data-array
+} loop
+
+% line-count data-array
+dup length 2 index idiv exch
+% line-count col-count data-array
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+0
+% init-line-count col-count data-array 0
+0 1 5 index 1 sub {
+  % line-count col-count data-array cur-count y
+  0 1 5 index 1 sub {
+    % line-count col-count data-array cur-count y x
+    6 copy exch 3 2 roll pop
+    % [save] line-count col-count data-array x y
+    is-visible-4
+    % line-count col-count data-array cur-count y x is-visible?
+    { 3 2 roll 1 add 3 1 roll } if
+    % line-count col-count data-array updated-count y x
+    pop
+  } for
+  pop
+} for
+% line-count col-count data-array visible-count
+15 string cvs show
+
+(Second Puzzle: )
+72 664 moveto show
+0 4 1 roll
+% init-best-score line-count col-count data-array
+1 1 4 index 2 sub {
+  % best-score line-count col-count data-array y
+  1 1 4 index 2 sub {
+    % best-score line-count col-count data-array y x
+    5 copy exch
+    % [save] line-count col-count data-array x y
+    scenic-score
+%dup 15 string cvs stderr exch writestring
+%stderr 9 write
+    % best-score line-count col-count data-array y x cur-score
+    dup 7 index gt
+    % best-score line-count col-count data-array y x cur-score is-better?
+    { 7 6 roll pop 6 1 roll }
+    { pop }
+    ifelse
+    % updated-best-score line-count col-count data-array y x
+    pop
+  } for
+%stderr 10 write
+  pop
+} for
+% best-score line-count col-count data-array
+4 3 roll
+15 string cvs show
+
+showpage
+quit
