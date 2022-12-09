@@ -1,0 +1,428 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day09.ps <day09.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% tail-x tail-y head-x head-y dx dy -> tail-x tail-y head-x head-y
+/move-head {
+  % old-tail-x old-tail-y old-head-x old-head-y dx dy
+  exch 4 1 roll
+  % old-tail-x old-tail-y dx old-head-x old-head-y dy
+  add 3 1 roll
+  % old-tail-x old-tail-y head-y dx old-head-x
+  add exch
+  % old-tail-x old-tail-y head-x head-y
+  4 2 roll
+  % head-x head-y old-tail-x old-tail-y
+  3 index 2 index sub 3 index 2 index sub
+  { %%% 1-iteration loop to use `exit` as a short circuit
+    % head-x head-y old-tail-x old-tail-y TH-x TH-y
+    dup -1 lt {
+      % head-x head-y old-tail-x old-tail-y TH-x -1>TH-y
+      pop pop pop pop
+      % head-x head-y
+      2 copy 1 add
+      % head-x head-y tail-x tail-y
+      exit
+    } if
+    % head-x head-y old-tail-x old-tail-y TH-x -1≤TH-y
+    dup 1 gt {
+      % head-x head-y old-tail-x old-tail-y TH-x 1<TH-y
+      pop pop pop pop
+      % head-x head-y
+      2 copy 1 sub
+      % head-x head-y tail-x tail-y
+      exit
+    } if
+    % head-x head-y old-tail-x old-tail-y TH-x -1≤TH-y≤1
+    pop
+    % head-x head-y old-tail-x old-tail-y TH-x
+    dup -1 lt {
+      % head-x head-y old-tail-x old-tail-y -1>TH-x
+      pop pop pop
+      % head-x head-y
+      2 copy exch 1 add exch
+      % head-x head-y tail-x tail-y
+      exit
+    } if
+    % head-x head-y old-tail-x old-tail-y -1≤TH-x
+    dup 1 gt {
+      % head-x head-y old-tail-x old-tail-y 1<TH-x
+      pop pop pop
+      % head-x head-y
+      2 copy exch 1 sub exch
+      % head-x head-y tail-x tail-y
+      exit
+    } if
+    % head-x head-y old-tail-x old-tail-y -1≤TH-x≤1
+    pop
+    % head-x head-y old-tail-x old-tail-y
+    exit
+  } loop
+  % head-x head-y tail-x tail-y
+  4 2 roll
+  % tail-x tail-y head-x head-y
+} bind def
+
+% tail-x tail-y head-x head-y (M) -> tail-x tail-y head-x head-y
+/exec-step {
+  { %%% 1-iteration loop to use `exit` as a short circuit
+    dup (U) eq {
+      pop 0 -1 move-head exit
+    } if
+    dup (D) eq {
+      pop 0 1 move-head exit
+    } if
+    dup (L) eq {
+      pop -1 0 move-head exit
+    } if
+    dup (R) eq {
+      pop 1 0 move-head exit
+    } if
+    1.125 pstack
+    quit
+  } loop
+%3 index 15 string cvs stderr exch writestring
+%stderr 9 write
+%2 index 15 string cvs stderr exch writestring
+%stderr 9 write
+%1 index 15 string cvs stderr exch writestring
+%stderr 9 write
+%0 index 15 string cvs stderr exch writestring
+%stderr 10 write
+} bind def
+
+% (string1) (string2) -> (string1string2)
+/concat {
+  % (string1) (string2)
+  dup length 2 index length add string
+  % (string1) (string2) (blank)
+  dup 0 4 index putinterval
+  % (string1) (string2) (string1blank)
+  3 2 roll length
+  % (string2) (string1blank) string1-length
+  3 2 roll 2 index 4 1 roll putinterval
+  % (string1string2)
+} bind def
+
+% x y -> key
+/xy-key {
+  % x y
+  exch 15 string cvs
+  % y (x)
+  ( ) concat
+  % y (x )
+  exch 15 string cvs
+  % (x ) (y)
+  concat
+  % (x y)
+} bind def
+
+% pos-dict x y -> ø
+/update-pos-dict {
+  % pos-dict x y
+  xy-key
+  % pos-dict key
+  2 copy known
+  % pos-dict key has-key?
+  {
+    2 copy get
+    % pos-dict key old-value
+    1 add
+    % pos-dict key new-value
+    put
+  }
+  {
+    1 put
+  }
+  ifelse
+} bind def
+
+% tail-pos-dict tail-x tail-y head-x head-y (M)
+%   -> tail-pos-dict tail-x tail-y head-x head-y
+/record-exec-step {
+  exec-step
+  % tail-pos-dict tail-x tail-y head-x head-y
+  5 copy pop pop update-pos-dict
+} bind def
+
+% tail-pos-dict tail-x tail-y head-x head-y (M count)
+%   -> tail-pos-dict tail-x tail-y head-x head-y
+/record-exec-line {
+  ( ) search
+  not { 2.125 pstack quit } if
+  % tail-pos-dict tail-x tail-y head-x head-y (count) ( ) (M)
+  exch pop exch cvi
+  % tail-pos-dict tail-x tail-y head-x head-y (M) count
+  {
+    % tail-pos-dict tail-x tail-y head-x head-y (M)
+    dup 7 1 roll
+    % (M) tail-pos-dict tail-x tail-y head-x head-y (M)
+    record-exec-step
+    % (M) tail-pos-dict tail-x tail-y head-x head-y
+    6 5 roll
+    % tail-pos-dict tail-x tail-y head-x head-y (M)
+  } repeat
+  % tail-pos-dict tail-x tail-y head-x head-y (M)
+  pop
+} bind def
+
+
+/rawdata [
+  {
+    datafile 100 string readline
+    not { pop exit } if
+  } loop
+] def
+
+
+/Helvetica 20 selectfont
+
+(First Puzzle: )
+72 700 moveto show
+100 dict 0 0 0 0
+% tail-pos-dict tail-x tail-y head-x head-y
+rawdata {
+  % tail-pos-dict tail-x tail-y head-x head-y line
+  record-exec-line
+  % tail-pos-dict tail-x tail-y head-x head-y
+} forall
+% tail-pos-dict tail-x tail-y head-x head-y
+4 index length
+15 string cvs show
+
+(Second Puzzle: )
+72 664 moveto show
+
+% head-x head-y (M) -> head-x head-y
+/update-head {
+  { %%% 1-iteration loop to use `exit` as a short circuit
+    dup (U) eq {
+      pop 1 sub exit
+    } if
+    dup (D) eq {
+      pop 1 add exit
+    } if
+    dup (L) eq {
+      pop exch 1 sub exch exit
+    } if
+    dup (R) eq {
+      pop exch 1 add exch exit
+    } if
+    3.125 pstack
+    quit
+  } loop
+} bind def
+
+% -infty..-1 -> -1
+% 0          -> 0
+% 1..infty   -> 1
+/flatten-delta {
+  dup -1 le
+  { pop -1 }
+  { 1 ge
+    { 1 } { 0 } ifelse
+  } ifelse
+} bind def
+
+
+% old-tail-x old-tail-y new-head-x new-head-y
+%   -> new-tail-x new-tail-y new-head-x new-head-y
+/update-tail {
+  % old-tail-x old-tail-y head-x head-y
+  4 2 roll
+  % head-x head-y old-tail-x old-tail-y
+  3 index 2 index sub 3 index 2 index sub
+  % head-x head-y old-tail-x old-tail-y TH-x TH-y
+  1 index abs 2 ge
+  % head-x head-y old-tail-x old-tail-y TH-x TH-y is-TH-x-large?
+  1 index abs 2 ge or
+  % head-x head-y old-tail-x old-tail-y TH-x TH-y is-TH-large?
+  {
+    % head-x head-y old-tail-x old-tail-y TH-x TH-y
+    flatten-delta
+    % head-x head-y old-tail-x old-tail-y TH-x tail-dy
+    exch flatten-delta
+    % head-x head-y old-tail-x old-tail-y tail-dy tail-dx
+    4 3 roll
+    % head-x head-y old-tail-y tail-dy tail-dx old-tail-x
+    add
+    % head-x head-y old-tail-y tail-dy tail-x
+    3 1 roll add
+    % head-x head-y tail-x tail-y
+  }
+  { pop pop }
+  ifelse
+  % head-x head-y tail-x tail-y
+  4 2 roll
+  % tail-x tail-y head-x head-y
+} bind def
+
+% knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+%   -> knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+/update-chain {
+  dup 1 sub {
+    % knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+    5 1 roll
+    % knot-n-x knot-n-y ... n knot-2-x knot-2-y knot-1-x knot-1-y
+    update-tail
+    % knot-n-x knot-n-y ... n knot-2-x knot-2-y knot-1-x knot-1-y
+    4 index 2 mul 1 add
+    % knot-n-x knot-n-y ... n knot-2-x knot-2-y knot-1-x knot-1-y 2n+1
+    2 roll
+    % knot-1-x knot-1-y knot-n-x knot-n-y ... n knot-2-x knot-2-y
+    3 2 roll
+    % knot-1-x knot-1-y knot-n-x knot-n-y ... knot-2-x knot-2-y n
+  } repeat
+  % knot-(n-1)-x knot-(n-1)-y ... knot-1-x knot-1-y knot-n-x knot-n-y n
+  3 1 roll
+  % knot-(n-1)-x knot-(n-1)-y ... knot-1-x knot-1-y n knot-n-x knot-n-y
+  2 index 2 mul 1 add 2 roll
+  % knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+} bind def
+
+% tail-pos-dict knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n line
+%   -> tail-pos-dict knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+/move-chain {
+  % tail-pos-dict knots n (M count)
+  ( ) search
+  not { 4.125 pstack quit } if
+  % tail-pos-dict knots n (count) ( ) (M)
+  exch pop
+  % tail-pos-dict knots n (count) (M)
+  2 index 2 mul 3 add 1 roll
+  % tail-pos-dict (M) knots n (count)
+  cvi
+  % tail-pos-dict (M) knots n count
+  {
+    % tail-pos-dict (M) knots n
+    dup 2 mul 1 add index
+    % tail-pos-dict (M) other-knots head-x head-y n (M)
+    exch 4 1 roll
+    % tail-pos-dict (M) other-knots n head-x head-y (M)
+    update-head
+    % tail-pos-dict (M) other-knots n head-x head-y
+    3 2 roll
+    % tail-pos-dict (M) knots n
+    update-chain
+    % tail-pos-dict (M) tail-x tail-y other-knots n
+    dup 2 mul 3 add
+    % tail-pos-dict (M) tail-x tail-y other-knots n 2n+3
+    dup index exch
+    % tail-pos-dict (M) tail-x tail-y other-knots n tail-pos-dict 2n+3
+    1 sub dup index exch
+    % tail-pos-dict (M) tail-x tail-y other-knots n tail-pos-dict tail-x 2n+2
+    1 sub index
+    % tail-pos-dict (M) tail-x tail-y other-knots n tail-pos-dict tail-x tail-y
+    update-pos-dict
+    % tail-pos-dict (M) tail-x tail-y other-knots n
+  } repeat
+  % tail-pos-dict (M) knots n
+  dup 2 mul 2 add dup 1 sub roll
+  % tail-pos-dict knots n (M)
+  pop
+  % tail-pos-dict knots n
+} bind def
+
+% knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n min-x min-y max-x max-y
+%   -> knot-n-x knot-n-y ... knot-2-x knot-2-y knot-1-x knot-1-y n
+/dump-chain {
+  % knots n min-x min-y max-x max-y
+  1 index 4 index sub 1 add
+  % knots n min-x min-y max-x max-y len-x
+  1 index 4 index sub 1 add mul
+  % knots n min-x min-y max-x max-y len-str
+  dup string
+  % knots n min-x min-y max-x max-y len-str (\0\0\0)
+  exch 1 sub 0 exch 1 exch
+  % knots n min-x min-y max-x max-y str 0 1 len-str-1
+  {
+    % str i
+    1 index exch
+    % str str i
+    46 put
+    % updated-str
+  } for
+  % knots n min-x min-y max-x max-y (....)
+  2 index 5 index sub 1 add exch
+  % knots n min-x min-y max-x max-y line-size (....)
+  4 2 roll pop pop
+  % knots n min-x min-y line-size (....)
+  5 4 roll exch
+  % knots min-x min-y line-size n (....)
+  48 2 index
+  % knots min-x min-y line-size n (....) char n
+  {
+    % other-knots cur-x cur-y min-x min-y line-size n (....) char
+    7 index 7 index
+    % other-knots cur-x cur-y min-x min-y line-size n (....) char x y
+    6 index sub 5 index mul add 6 index sub
+    % other-knots cur-x cur-y min-x min-y line-size n (....) char offset
+    2 index 1 index get 46 eq
+    { 3 copy exch put } if
+    % other-knots cur-x cur-y min-x min-y line-size n (..1.) char offset
+    pop 1 add
+    % other-knots cur-x cur-y min-x min-y line-size n (..1.) next-char
+    8 6 roll
+    % other-knots min-x min-y line-size n (..1.) next-char cur-x cur-y
+    4 index 2 mul 6 add 2 roll
+    % cur-x cur-y other-knots min-x min-y line-size n (..1.) next-char
+  } repeat
+  % knots min-x min-y line-size n (..1.) char
+  pop
+  % knots min-x min-y line-size n (..1.)
+  5 2 roll 3 1 roll pop pop exch
+  % knots n line-size (..1.)
+  0 2 index 2 index length 1 sub {
+    % knots n line-size (..1.) offset
+    exch dup 3 2 roll
+    % knots n line-size (..1.) (..1.) offset
+    3 index
+    % knots n line-size (..1.) (..1.) offset line-size
+    getinterval
+    % knots n line-size (..1.) line
+    stderr exch writestring
+    stderr 10 write
+    % knots n line-size (..1.)
+  } for
+  % knots n line-size (..1.)
+  pop pop
+} bind def
+
+500 dict 10 { 0 0 } repeat 10
+% tail-pos-dict knots n
+rawdata {
+  % tail-pos-dict knots n line
+  %%% stderr 1 index writestring
+  %%% stderr 10 write
+  % tail-pos-dict knots n line
+  move-chain
+  % tail-pos-dict knots n
+  %%% small-example: 0 -4 5 0 dump-chain
+  %%% large-example: -11 -15 14 5 dump-chain
+  % tail-pos-dict knots n
+} forall
+% tail-pos-dict knots n
+dup 2 mul 1 add index
+% tail-pos-dict knots n tail-pos-dict
+length 15 string cvs show
+
+showpage
+quit
