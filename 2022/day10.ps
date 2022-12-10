@@ -1,0 +1,127 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day09.ps <day09.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% crt reg-dict prev-cycle-count register
+%   -> crt reg-dict cycle-count register
+/next-cycle {
+  % crt reg-dict prev-cycle-count register
+  exch 1 add exch
+  % crt reg-dict cycle-count register
+  3 copy pop known
+  % crt reg-dict cycle-count register save-reg?
+  { 3 copy put } if
+  % crt reg-dict cycle-count register
+  1 index 1 sub 40 mod
+  % crt reg-dict cycle-count register cur-column
+  1 index sub abs 1 le
+  % crt reg-dict cycle-count register sprite-visible?
+  { 3 index 2 index 1 sub 35 put } if
+  % crt reg-dict cycle-count register
+} bind def
+
+% crt reg-dict cycle-count register line
+%   -> crt reg-dict cycle-count register
+/run-line {
+  % crt reg-dict prev-cycle-count prev-register line
+  dup (noop) eq {
+    % crt reg-dict prev-cycle-count prev-register line
+    pop
+    % crt reg-dict prev-cycle-count prev-register
+    next-cycle
+    % crt reg-dict cycle-count register
+  }
+  {
+    % crt reg-dict prev-cycle-count prev-register line
+    (addx ) anchorsearch
+    not { 1.125 pstack quit } if
+    % crt reg-dict prev-cycle-count prev-register (operand) (addx )
+    pop cvi
+    % crt reg-dict prev-cycle-count prev-register operand
+    5 1 roll
+    % operand crt reg-dict prev-cycle-count prev-register
+    next-cycle next-cycle
+    % operand crt reg-dict cycle-count prev-register
+    5 4 roll
+    % crt reg-dict cycle-count prev-register operand
+    add
+    % crt reg-dict cycle-count register
+  }
+  ifelse
+  % crt reg-dict cycle-count register
+} bind def
+
+/rawdata [
+  {
+    datafile 100 string readline
+    not { pop exit } if
+  } loop
+] def
+
+/Helvetica 20 selectfont
+
+(................................................................................................................................................................................................................................................)
+<<
+   20 0
+   60 0
+  100 0
+  140 0
+  180 0
+  220 0
+>>
+0 1
+% crt reg-dict cycle-count register
+rawdata { run-line } forall
+% crt reg-dict cycle-count register
+
+
+(First Puzzle: )
+72 700 moveto show
+% crt reg-dict cycle-count register
+0 3 index {
+  % accumulator key value
+  mul add
+  % updated-accumulator
+} forall
+15 string cvs show
+
+(Second Puzzle: )
+72 664 moveto show
+% crt reg-dict cycle-count register
+
+/Courier-Bold 20 selectfont
+0 1 5 index length 40 idiv 1 sub {
+  % crt reg-dict cycle-count register line-number
+  dup 20 mul 644 exch sub
+  % crt reg-dict cycle-count register line-number y
+  72 exch moveto
+  % crt reg-dict cycle-count register line-number
+  dup 40 mul
+  % crt reg-dict cycle-count register line-number crt-offset
+  5 index exch 40 getinterval
+  % crt reg-dict cycle-count register line-number (line)
+  show
+  % crt reg-dict cycle-count register line-number
+  pop
+} for
+
+showpage
+quit
