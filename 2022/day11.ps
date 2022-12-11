@@ -1,0 +1,302 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day11.ps <day11.txt | display
+
+% each monkey is represented by an array:
+% [ item-worry-array
+%   operation-proc
+%   test-proc
+%   monkey-index-true
+%   monkey-index-false ]
+
+% I wasted a lot of time trying to write bigint primitives and getting
+% them wrong, until I figured out the trick implemented here.
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+% [ item_0 ... item_n-1 ] item_n -> [ item_0 item_1 ... item_n ]
+/aappend {
+  exch aload length
+  % new-item item-0 item-1 ... item-n-1 n
+  dup dup 2 add exch 1 add roll
+  % item-0 item-1 ... item-n-1 n new-item
+  exch
+  % item-0 item-1 ... item-n-1 new-item n
+  1 add array astore
+} bind def
+
+% [ item_0 item_1 ... item_n ] -> [ item_1 ... item_n ] item_0
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+/radix 1 def
+
+/init-data [
+  {
+    datafile 100 string readline
+    not { pop exit } if
+
+    { %%% 1-iteration loop to use `exit` as a short circuit
+      (Monkey ) anchorsearch {
+        pop pop [ exit
+      } if
+
+      (  Starting items: ) anchorsearch {
+        % (item, item, ..., item) match
+        pop [ exch
+        { % mark prev-items suffix
+          (, ) search
+          { % mark prev-items new-suffix (, ) (cur-item)
+            exch pop cvi
+            % mark prev-items new-suffix cur-item
+            exch
+            % mark prev-items cur-item new-suffix
+          }
+          { % mark prev-item (last-item)
+            cvi ] exit
+          }
+          ifelse
+        } loop
+        % worry-array
+        exit
+      } if
+
+      (  Operation: new = old ) anchorsearch {
+        % (operator operand) match
+        pop
+        % (operator operand)
+        dup (* old) eq
+        { pop /dup load /mul load }
+        {
+          (* ) anchorsearch
+          { pop /mul load exch }
+          { (+ ) anchorsearch
+            { pop /add load exch }
+            { 1.125 pstack quit }
+            ifelse
+          } ifelse
+          % operator-proc (operand)
+          cvi exch
+        } ifelse
+        % operand operator-proc
+        2 array astore cvx bind
+        % operation-proc
+        exit
+      } if
+
+      (  Test: divisible by ) anchorsearch {
+        % (operand) match
+        pop cvi
+        % operand
+        dup radix mul /radix exch def
+        % operand
+        [ exch /mod load 0 /eq load ] cvx bind
+        % test-proc
+        exit
+      } if
+
+      (    If true: throw to monkey ) anchorsearch {
+        % (monkey-index) match
+        pop cvi exit
+      } if
+
+      (    If false: throw to monkey ) anchorsearch {
+        % (monkey-index) match
+        pop cvi ] exit
+      } if
+
+      dup length 0 eq { pop exit } if
+
+      2.125 pstack quit
+    } loop
+  } loop
+] def
+
+% data monkey-array divisor -> ø
+/single-turn {
+  exch
+  % data divisor monkey-array
+  dup 0 get
+  % data divisor monkey-array worry-item-array
+  1 index 0 0 array put
+  % data divisor updated-monkey-array worry-item-array
+  {
+    % data divisor monkey-array prev-cur-worry
+    1 index 1 get
+    % data divisor monkey-array prev-cur-worry operation-proc
+    exec radix mod
+    % data divisor monkey-array intermediate-cur-worry
+    2 index idiv radix mod
+    % data divisor monkey-array cur-worry
+    dup 2 index 2 get
+    % data divisor monkey-array cur-worry cur-worry test-proc
+    exec
+    % data divisor monkey-array cur-worry test-proc-result
+    { 1 index 3 get }
+    { 1 index 4 get }
+    ifelse
+    % data divisor monkey-array cur-worry target-monkey-index
+    4 index exch get
+    % data divisor monkey-array cur-worry target-monkey-array
+    dup 0 get
+    % data divisor monkey-array cur-worry target-monkey-array prev-target-worry-array
+    3 2 roll aappend
+    % data divisor monkey-array target-monkey-array updated-target-worry-array
+    0 exch put
+    % data divisor monkey-array
+  } forall
+  % data divisor monkey-array
+  pop pop pop
+} bind def
+
+/dump-worry-levels {
+  0
+  data {
+    % index monkey-array
+    0 get
+    % index worry-array
+    stderr (Monkey ) writestring
+    1 index 15 string cvs stderr exch writestring
+    stderr (:) writestring
+    % index worry-array
+    {
+      % index cur-worry-value
+      stderr ( ) writestring
+      15 string cvs stderr exch writestring
+      % index
+    } forall
+    % index
+    stderr 10 write
+    % index
+    1 add
+    % next-index
+  } forall
+  pop
+} bind def
+
+% divisor round-count -> inspect-array
+/main-run {
+  % divisor round-count
+  [ init-data {
+    % init-monkey-array
+    dup length array copy
+    % cur-monkey-array
+    dup 0 get
+    % cur-monkey-array init-worry-array
+    dup length array copy
+    % cur-monkey-array new-worry-array
+    1 index exch 0 exch put
+    % cur-monkey-array
+  } forall ]
+  % divisor round-count data-copy
+  [ 1 index length { 0 } repeat ]
+  % divisor round-count data-copy init-inspect-array
+  3 2 roll
+  % divisor data-copy init-inspect-array round-count
+  {
+    % divisor data inspect-array
+    0
+    % divisor data inspect-array index
+    2 index {
+      % divisor data inspect-array index monkey-array
+      dup 0 get length
+      % divisor data inspect-array index monkey-array cur-worry-count
+      3 index 3 index get add
+      % divisor data inspect-array index monkey-array total-worry-count
+      3 index 3 index 3 2 roll put
+      % divisor data updated-inspect-array index monkey-array
+      3 index exch 5 index
+      % divisor data updated-inspect-array index data monkey-array divisor
+      single-turn
+      % divisor data updated-inspect-array index
+      1 add
+    } forall
+    % divisor data updated-inspect-array index
+    pop
+    %%% dumps
+    %dump-worry-levels
+    %stderr 10 write
+  } repeat
+  % divisor data inspect-array
+  3 1 roll pop pop
+  % inspect-array
+} bind def
+
+% inspect-array -> inspect-array
+/dump-inspect-array {
+  0 1 index {
+    % index inspect-count
+    stderr (Monkey ) writestring
+    1 index 15 string cvs stderr exch writestring
+    stderr (: ) writestring
+    15 string cvs stderr exch writestring
+    stderr 10 write
+    1 add
+  } forall
+  pop
+} bind def
+
+% inspect-array -> business-index
+/business-index {
+  % inspect-array
+  0 0 3 2 roll
+  % init-max init-second-max inspect-array
+  {
+    % max second-max cur-count
+    2 index 1 index lt
+    % max second-max cur-count is-new-max?
+    { 3 1 roll pop
+      % cur-count old-max
+    }
+    { 2 copy lt { exch } if pop }
+    ifelse
+    % updated-max updated-second-max
+  } forall
+  % max second-max
+  mul
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+3 20 main-run
+% inspect-array
+business-index
+15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+1 10000 main-run
+% inspect-array
+business-index
+15 string cvs show
+
+showpage
+quit
