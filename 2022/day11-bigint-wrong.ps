@@ -1,0 +1,517 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day11.ps <day11.txt | display
+
+% each monkey is represented by an array:
+% [ item-worry-array
+%   operation-proc
+%   test-proc
+%   monkey-index-true
+%   monkey-index-false ]
+
+% bigints are arrays of limbs, least significant first
+
+% WARNING:
+% this produces wrong results, so there is probably
+% a bug in some corner case here.
+
+/radix 100 def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+% [ item_0 ... item_n-1 ] item_n -> [ item_0 item_1 ... item_n ]
+/aappend {
+  exch aload length
+  % new-item item-0 item-1 ... item-n-1 n
+  dup dup 2 add exch 1 add roll
+  % item-0 item-1 ... item-n-1 n new-item
+  exch
+  % item-0 item-1 ... item-n-1 new-item n
+  1 add array astore
+} bind def
+
+% [ item_0 item_1 ... item_n ] -> [ item_1 ... item_n ] item_0
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+% file bigint -> ø
+/writebigint {
+  1 index ([) writestring
+  {
+    % file limb
+    1 index 32 write
+    % file (limb)
+    15 string cvs
+    % file (limb)
+    1 index exch
+    % file file (limb)
+    writestring
+    % file
+  } forall
+  ( ]) writestring
+} bind def
+
+% bigint factor carry -> bigint
+/bigaddmul {
+  % bigint factor carry
+  2 index aload length array astore
+  % bigint factor carry bigint-copy
+  4 1 roll 3 2 roll pop
+  % bigint-copy factor carry
+  0 {
+    % bigint factor carry index
+    3 index length 1 index le
+    % bigint factor carry index overflow?
+    { pop
+      % bigint factor carry
+      dup 0 eq
+      { pop pop }
+      { exch pop aappend }
+      ifelse
+      % bigint
+      exit
+    } if
+    % bigint factor carry index
+    exch 3 index 2 index get
+    % bigint factor index carry cur-limb
+    3 index mul
+    % bigint factor index carry temp-product
+    add
+    % bigint factor index result
+    dup radix mod
+    % bigint factor index result new-limb
+    exch radix idiv
+    % bigint factor index new-limb new-carry
+    3 1 roll
+    % bigint factor new-carry index new-limb
+    4 index 2 index 2 index put
+    % updated-bigint factor new-carry index new-limb
+    pop
+    % updated-bigint factor new-carry index
+    1 add
+    % updated-bigint factor new-carry next-index
+  } loop
+} bind def
+
+% bigint int -> bigint
+/bigadd { 1 exch bigaddmul } bind def
+/vbigadd {
+  1 index stderr exch writebigint
+  stderr ( + ) writestring
+  dup 15 string cvs stderr exch writestring
+  stderr ( = ) writestring
+  bigadd
+  dup stderr exch writebigint
+  stderr 10 write
+} bind def
+
+% bigint int -> bigint
+/bigmul { 0 bigaddmul } bind def
+/vbigmul {
+  1 index stderr exch writebigint
+  stderr ( * ) writestring
+  dup 15 string cvs stderr exch writestring
+  stderr ( = ) writestring
+  bigmul
+  dup stderr exch writebigint
+  stderr 10 write
+} bind def
+
+% bigint factor index -> bigint
+/bigbigmulpart {
+  dup 0 eq
+  { bigaddmul }
+  {
+    % bigint factor index
+    2 index 0 2 index getinterval
+    % bigint factor index prefix
+    3 index 2 index
+    % bigint factor index prefix bigint index
+    1 index length 1 index sub getinterval
+    % bigint factor index prefix suffix
+    3 index 0 bigaddmul
+    % bigint factor index prefix new-suffix
+    1 index length 1 index length add array
+    % bigint factor index prefix new-suffix new-bigint
+    6 1 roll 5 4 roll pop
+    % new-bigint factor index prefix new-suffix
+    4 index exch 3 index exch putinterval
+    % new-bigint factor index prefix
+    3 index exch 0 exch putinterval
+    % new-bigint factor index
+    pop pop
+  } ifelse
+} bind def
+
+% bigint bigint -> bigint
+/bigbigmul {
+  % bigint bigint
+  1 index length 1 index length
+  % bigint bigint len1 len2
+  gt { exch } if
+  % smaller-bigint larger-bigint
+  0 1 3 index length 1 sub {
+    % smaller-bigint accumulator-bigint index
+    2 index 1 index get
+    % smaller-bigint accumulator-bigint index factor
+    exch bigbigmulpart
+    % smaller-bigint accumulator-bigint
+  } for
+  % smaller-bigint result-bigint
+  exch pop
+  % result-bigint
+} bind def
+
+/vbigbigmul {
+  1 index stderr exch writebigint
+  stderr ( * ) writestring
+  dup stderr exch writebigint
+  stderr ( = ) writestring
+  bigbigmul
+  dup stderr exch writebigint
+  stderr 10 write
+} bind def
+
+% dividand-bigint divisor-int -> quotient-bigint remainder-int
+/bigdivmod {
+  % bigint divisor
+  exch aload length array astore exch
+  % bigint-copy divisor
+  0 2 index length 1 sub -1 0 {
+    % bigint divisor carry index
+    exch radix mul
+    % bigint divisor index multiplied-carry
+    3 index 2 index get
+    % bigint divisor index multiplied-carry cur-limb
+    add
+    % bigint divisor index cur-dividand
+    dup 3 index mod
+    % bigint divisor index cur-dividand cur-remainder
+    exch 3 index idiv
+    % bigint divisor index cur-remainder cur-quotient
+    4 index exch 3 index exch put
+    % updated-bigint divisor index cur-remainder
+    exch pop
+    % updated-bigint divisor next-carry
+  } for
+  % quotient-bigint divisor remainder
+  exch pop exch
+  % remainder quotient-bigint
+  {
+    % remainder quotient-bigint
+    dup length 1 eq { exit } if
+    % remainder quotient-bigint
+    dup dup length 1 sub get
+    % remainder quotient-bigint last-limb
+    0 eq
+    { aload
+      length 1 sub array
+      exch pop
+      astore
+    }
+    { exit }
+    ifelse
+  } loop
+  % remainder quotient-bigint
+  exch
+  % quotient-bigint remainder
+} bind def
+
+/vbigdivmod {
+  1 index stderr exch writebigint
+  stderr ( = ) writestring
+  dup 15 string cvs stderr exch writestring
+  stderr ( * ) writestring
+  bigdivmod
+  1 index stderr exch writebigint
+  stderr ( + ) writestring
+  dup 15 string cvs stderr exch writestring
+  stderr 10 write
+} bind def
+
+% bigint int -> bigint
+/bigidiv { bigdivmod pop } bind def
+/vbigidiv { vbigdivmod pop } bind def
+
+% bigint int -> int
+/bigmod { bigdivmod exch pop } bind def
+/vbigmod { vbigdivmod exch pop } bind def
+
+
+/init-data [
+  {
+    datafile 100 string readline
+    not { pop exit } if
+
+    { %%% 1-iteration loop to use `exit` as a short circuit
+      (Monkey ) anchorsearch {
+        pop pop [ exit
+      } if
+
+      (  Starting items: ) anchorsearch {
+        % (item, item, ..., item) match
+        pop [ exch
+        { % mark prev-items suffix
+          (, ) search
+          { % mark prev-items new-suffix (, ) (cur-item)
+            exch pop cvi
+            % mark prev-items new-suffix cur-item
+            [ exch ]
+            % mark prev-items new-suffix [cur-item]
+            exch
+            % mark prev-items cur-item new-suffix
+          }
+          { % mark prev-item (last-item)
+            [ exch cvi ] ] exit
+          }
+          ifelse
+        } loop
+        % worry-array
+        exit
+      } if
+
+      (  Operation: new = old ) anchorsearch {
+        % (operator operand) match
+        pop
+        % (operator operand)
+        dup (* old) eq
+        { pop /dup load /bigbigmul load }
+        {
+          (* ) anchorsearch
+          { pop /bigmul load exch }
+          { (+ ) anchorsearch
+            { pop /bigadd load exch }
+            { 1.125 pstack quit }
+            ifelse
+          } ifelse
+          % operator-proc (operand)
+          cvi exch
+        } ifelse
+        % operand operator-proc
+        /exec load 3 array astore cvx bind
+        % operation-proc
+        exit
+      } if
+
+      (  Test: divisible by ) anchorsearch {
+        % (operand) match
+        pop cvi
+        % operand
+        [ exch /bigmod load /exec load 0 /eq load ] cvx bind
+        % test-proc
+        exit
+      } if
+
+      (    If true: throw to monkey ) anchorsearch {
+        % (monkey-index) match
+        pop cvi exit
+      } if
+
+      (    If false: throw to monkey ) anchorsearch {
+        % (monkey-index) match
+        pop cvi ] exit
+      } if
+
+      dup length 0 eq { pop exit } if
+
+      2.125 pstack quit
+    } loop
+  } loop
+] def
+
+% data monkey-array divisor -> ø
+/single-turn {
+  exch
+  % data divisor monkey-array
+  dup 0 get
+  % data divisor monkey-array worry-item-array
+  1 index 0 0 array put
+  % data divisor updated-monkey-array worry-item-array
+  {
+    % data divisor monkey-array prev-cur-worry
+    1 index 1 get
+    % data divisor monkey-array prev-cur-worry operation-proc
+    exec
+    % data divisor monkey-array intermediate-cur-worry
+    2 index dup 1 eq not { bigidiv } { pop } ifelse
+    % data divisor monkey-array cur-worry
+    dup 2 index 2 get
+    % data divisor monkey-array cur-worry cur-worry test-proc
+    exec
+    % data divisor monkey-array cur-worry test-proc-result
+    { 1 index 3 get }
+    { 1 index 4 get }
+    ifelse
+    % data divisor monkey-array cur-worry target-monkey-index
+    4 index exch get
+    % data divisor monkey-array cur-worry target-monkey-array
+    dup 0 get
+    % data divisor monkey-array cur-worry target-monkey-array prev-target-worry-array
+    3 2 roll aappend
+    % data divisor monkey-array target-monkey-array updated-target-worry-array
+    0 exch put
+    % data divisor monkey-array
+  } forall
+  % data divisor monkey-array
+  pop pop pop
+} bind def
+
+/dump-worry-levels {
+  0
+  data {
+    % index monkey-array
+    0 get
+    % index worry-array
+    stderr (Monkey ) writestring
+    1 index 15 string cvs stderr exch writestring
+    stderr (:) writestring
+    % index worry-array
+    {
+      % index cur-worry-value
+      stderr ( ) writestring
+      15 string cvs stderr exch writestring
+      % index
+    } forall
+    % index
+    stderr 10 write
+    % index
+    1 add
+    % next-index
+  } forall
+  pop
+} bind def
+
+% divisor round-count -> inspect-array
+/main-run {
+  % divisor round-count
+  [ init-data {
+    % init-monkey-array
+    dup length array copy
+    % cur-monkey-array
+    dup 0 get
+    % cur-monkey-array init-worry-array
+    dup length array copy
+    % cur-monkey-array new-worry-array
+    1 index exch 0 exch put
+    % cur-monkey-array
+  } forall ]
+  % divisor round-count data-copy
+  [ 1 index length { 0 } repeat ]
+  % divisor round-count data-copy init-inspect-array
+  3 2 roll
+  % divisor data-copy init-inspect-array round-count
+  0 5 1 roll
+  % round-index divisor data-copy init-inspect-array round-count
+  {
+    % prev-round-index divisor data inspect-array
+    4 3 roll 1 add
+    stderr (Round ) writestring
+    dup 15 string cvs stderr exch writestring
+    stderr 10 write
+    4 1 roll
+    % round-index divisor data inspect-array
+    0
+    % divisor data inspect-array index
+    2 index {
+      % divisor data inspect-array index monkey-array
+      dup 0 get length
+      % divisor data inspect-array index monkey-array cur-worry-count
+      3 index 3 index get add
+      % divisor data inspect-array index monkey-array total-worry-count
+      3 index 3 index 3 2 roll put
+      % divisor data updated-inspect-array index monkey-array
+      3 index exch 5 index
+      % divisor data updated-inspect-array index data monkey-array divisor
+      single-turn
+      % divisor data updated-inspect-array index
+      1 add
+    } forall
+    % divisor data updated-inspect-array index
+    pop
+    %%% dumps
+    %dump-worry-levels
+    %stderr 10 write
+  } repeat
+  % divisor data inspect-array
+  3 1 roll pop pop
+  % inspect-array
+} bind def
+
+% inspect-array -> inspect-array
+/dump-inspect-array {
+  0 1 index {
+    % index inspect-count
+    stderr (Monkey ) writestring
+    1 index 15 string cvs stderr exch writestring
+    stderr (: ) writestring
+    15 string cvs stderr exch writestring
+    stderr 10 write
+    1 add
+  } forall
+  pop
+} bind def
+
+% inspect-array -> business-index
+/business-index {
+  % inspect-array
+  0 0 3 2 roll
+  % init-max init-second-max inspect-array
+  {
+    % max second-max cur-count
+    2 index 1 index lt
+    % max second-max cur-count is-new-max?
+    { 3 1 roll pop
+      % cur-count old-max
+    }
+    { 2 copy lt { exch } if pop }
+    ifelse
+    % updated-max updated-second-max
+  } forall
+  % max second-max
+  mul
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+3 20 main-run
+% inspect-array
+business-index
+15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+1 10000 main-run
+% inspect-array
+business-index
+15 string cvs show
+
+showpage
+quit
