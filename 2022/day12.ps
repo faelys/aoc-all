@@ -1,0 +1,497 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day12.ps <day12.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+/rawdata [
+  {
+    datafile 200 string readline
+    not { pop exit } if
+  } loop
+] def
+
+/width rawdata 1 get length def
+/height rawdata length def
+
+% x y -> valid?
+/xy-valid? {
+  % x y
+  1 index 0 ge
+  % x y x≥0
+  2 index width lt and
+  % x y x-valid?
+  1 index 0 ge
+  % x y x-valid? y≥0
+  2 index height lt and
+  % x y x-valid? y-valid?
+  and
+  % x y valid?
+  3 1 roll pop pop
+  % valid?
+} bind def
+
+% composite x y -> element
+/getxy {
+  2 copy xy-valid? not { 1.125 pstack quit } if
+  % composite x y
+  width mul add
+  % composite offset
+  get
+} bind def
+
+% composite x y element ->
+/putxy {
+  3 copy pop xy-valid? not { 2.125 pstack quit } if
+  % compose x y element
+  3 1 roll
+  % compose element x y
+  width mul add
+  % compose element offset
+  exch put
+} bind def
+
+% composite ->
+/dumpmap {
+  0 1 height 1 sub {
+    % composite y
+    0 1 width 1 sub {
+      % composite y x
+      3 copy exch getxy
+      % composite y x element
+      15 string cvs
+      % composite y x (element)
+      stderr 32 write
+      stderr exch writestring
+      % composite y x
+      pop
+      % composite y
+    } for
+    % composite y
+    stderr 10 write
+    % composite y
+    pop
+    % composite
+  } for
+  % composite
+  pop
+} bind def
+
+/zmap width height mul string def
+
+0 rawdata {
+  % y line
+  dup (S) search
+  { % y line suffix (S) prefix
+    length
+    % y line suffix (S) x
+    /startx exch def
+    % y line suffix (S)
+    pop pop
+    % y line
+    1 index /starty exch def
+    % y line
+    dup startx 97 put
+    % y fixed-line
+  }
+  { % y line line
+    pop
+  }
+  ifelse
+  % y line
+  dup (E) search
+  { % y line suffix (E) prefix
+    length
+    % y line suffix (E) x
+    /endx exch def
+    % y line suffix (E)
+    pop pop
+    % y line
+    1 index /endy exch def
+    % y line
+    dup endx 122 put
+    % y fixed-line
+  }
+  { % y line line
+    pop
+  }
+  ifelse
+  % y fixed-line
+  zmap exch
+  % y zmap fixed-line
+  2 index width mul
+  % y zmap fixed-line offset
+  exch putinterval
+  % y
+  1 add
+  % next-y
+} forall
+
+/stepmap [
+  width height mul
+  % size
+  dup 1 sub
+  % size repeat-count
+  { dup } repeat
+] def
+
+stepmap startx starty 0 putxy
+
+% x y -> has-step?
+/xy-has-step? {
+  % x y
+  stepmap 3 1 roll getxy
+  % steps
+  width height mul eq not
+  % has-step?
+} bind def
+
+% -> empty-queue
+/new-queue { 100 dict } bind def
+
+% queue x y ->
+/enqueue {
+  2 dup xy-valid?
+  { width mul add 1 put }
+  { pop pop pop }
+  ifelse
+} bind def
+
+% whatever-is-pushed-by-queue-forall -> x y
+/dequeue {
+  % key value
+  pop
+  % key
+  dup width mod
+  % key x
+  exch width idiv
+  % x y
+} bind def
+
+% source-x source-y dest-x dest-y -> valid?
+/step-valid? {
+  % source-x source-y dest-x dest-y
+  zmap 3 1 roll getxy
+  % source-x source-y dest-z
+  zmap 4 2 roll getxy
+  % dest-z source-z
+  1 add le
+} bind def
+
+% valid-array x y ssource-x source-y -> new-valid-array
+/push-step-if-exists {
+  2 copy xy-valid?
+  { 4 array astore apush }
+  { pop pop pop pop }
+  ifelse
+} bind def
+
+% x y proc ->
+% proc is called repeatedly with [x y neighbor-x neighbor-y]
+/forall-neighbors {
+  3 1 roll 0 array
+  % proc x y valid-array
+  3 copy pop 1 index 1 sub 1 index
+  % proc x y valid-array x y x-1 y
+  push-step-if-exists
+  % proc x y valid-array
+  3 copy pop 1 index 1 add 1 index
+  % proc x y valid-array x y x+1 y
+  push-step-if-exists
+  % proc x y valid-array
+  3 copy pop 2 copy 1 sub
+  % proc x y valid-array x y x y-1
+  push-step-if-exists
+  % proc x y valid-array
+  3 copy pop 2 copy 1 add
+  % proc x y valid-array x y x y+1
+  push-step-if-exists
+  % proc x y valid-array
+  3 1 roll pop pop
+  % proc valid-array
+  exch forall
+} bind def
+
+% x y proc ->
+/forall-source-neighbors {
+  0 array 4 2 roll
+  % proc arg-array x y
+  {
+    % proc arg-array [x y neighbor-x neighbor-y]
+    dup aload pop
+    % proc arg-array [x y neighbor-x neighbor-y] x y neighbor-x neighbor-y
+    4 2 roll
+    % proc arg-array [x y neighbor-x neighbor-y] neighbor-x neighbor-y x y
+    step-valid?
+    { apush }
+    { pop }
+    ifelse
+    % proc arg-array
+  } forall-neighbors
+  % proc arg-array
+  exch forall
+} bind def
+
+% x y proc ->
+/forall-dest-neighbors {
+  0 array 4 2 roll
+  % proc arg-array x y
+  {
+    % proc arg-array [x y neighbor-x neighbor-y]
+    dup aload pop
+    % proc arg-array [x y neighbor-x neighbor-y] x y neighbor-x neighbor-y
+    step-valid?
+    { apush }
+    { pop }
+    ifelse
+    % proc arg-array
+  } forall-neighbors
+  % proc arg-array
+  exch forall
+} bind def
+
+% queue ->
+/draw-queue {
+  % queue
+  0 1 height 1 sub {
+    % queue y
+    width string
+    % queue y empty-string
+    0 1 width 1 sub {
+      % queue y string x
+      2 index
+      % queue y string x y
+      2 copy width mul add
+      % queue y string x y key
+      5 index exch known
+      % queue y string x y in-queue?
+      { 113 }
+      { 2 copy xy-has-step?  { 35 } { 46 } ifelse }
+      ifelse
+      % queue y string x y char
+      3 index 3 index 3 2 roll put
+      % queue y string x y
+      pop pop
+    } for
+    % queue y string
+    stderr exch writestring
+    stderr 10 write
+    % queue y
+    pop
+  } for
+  % queue
+  pop
+} bind def
+
+
+
+% stderr (Height map:) writestring
+% stderr 10 write
+% zmap dumpmap
+% 
+% stderr (Coordinates: ) writestring
+% stderr startx 15 string cvs writestring
+% stderr (, ) writestring
+% stderr starty 15 string cvs writestring
+% stderr ( -> ) writestring
+% stderr endx 15 string cvs writestring
+% stderr (, ) writestring
+% stderr endy 15 string cvs writestring
+% stderr 10 write
+
+
+% queue x y ->
+/enqueue-neighbors {
+  {
+    aload pop
+    % queue x y neighbor-x neighbor-y
+    4 copy step-valid?
+    {
+      % queue x y neighbor-x neighbor-y
+      4 2 roll pop pop
+      % queue neighbor-x neighbor-y
+      2 index 3 1 roll enqueue
+      % queue
+    }
+    { pop pop pop pop }
+    ifelse
+    % queue
+  } forall-neighbors
+  % queue
+  pop
+} bind def
+
+new-queue
+startx starty {
+  aload pop
+  % queue x y neighbor-x neighbor-y
+  4 2 roll pop pop
+  % queue neighbor-x neighbor-y
+  2 index 3 1 roll enqueue
+  % queue
+} forall-dest-neighbors
+0 exch
+{
+  % prev-cycle-count cur-queue
+  exch 1 add exch
+  % cycle-count cur-queue
+  dup length 0 eq { pop exit } if
+  % cycle-count cur-queue
+  new-queue exch
+  % cycle-count next-queue cur-queue
+  {
+     dequeue
+     % next-queue x y
+    2 copy stepmap 3 1 roll getxy
+    % next-queue x y old-steps
+    dup 4 1 roll
+    % next-queue old-steps x y old-steps
+    3 copy pop {
+      aload pop
+      % next-queue old-steps x y prev-steps x y neighbor-x neighbor-y
+      stepmap 3 1 roll getxy
+      % next-queue old-steps x y prev-steps x y neighbor-steps
+      1 add
+      % next-queue old-steps x y prev-steps x y new-steps
+      3 1 roll pop pop
+      % next-queue old-steps x y prev-steps new-steps
+      2 copy gt { exch } if pop
+      % next-queue old-steps x y min-steps
+    } forall-source-neighbors
+    % next-queue old-steps x y min-steps
+    dup 5 4 roll
+    % next-queue x y min-steps min-steps old-steps
+    lt {
+      % next-queue x y min-steps
+      3 copy pop {
+        aload pop
+        % next-queue x y min-steps x y neighbor-x neighbor-y
+        4 2 roll pop pop
+        % next-queue x y min-steps neighbor-x neighbor-y
+        5 index 3 1 roll enqueue
+        % next-queue x y min-steps
+      } forall-dest-neighbors
+      % next-queue x y min-steps
+      stepmap 4 1 roll putxy
+    }
+    { pop pop pop }
+    ifelse
+    % next-queue
+  } forall
+} loop
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+stepmap endx endy getxy
+dup width height mul eq
+{ pop (--error--) }
+{ 15 string cvs }
+ifelse
+show
+
+(Second Puzzle: )
+72 664 moveto show
+
+/stepmap [
+  width height mul
+  % size
+  dup 1 sub
+  % size repeat-count
+  { dup } repeat
+] def
+
+stepmap endx endy 0 putxy
+
+new-queue
+endx endy {
+  aload pop
+  % queue x y neighbor-x neighbor-y
+  4 2 roll pop pop
+  % queue neighbor-x neighbor-y
+  2 index 3 1 roll enqueue
+  % queue
+} forall-source-neighbors
+0 exch
+{
+  % prev-cycle-count cur-queue
+  exch 1 add exch
+  % cycle-count cur-queue
+  dup length 0 eq { pop exit } if
+  % cycle-count cur-queue
+  new-queue exch
+  % cycle-count next-queue cur-queue
+  {
+    dequeue
+    % next-queue x y
+    2 copy stepmap 3 1 roll getxy
+    % next-queue x y old-steps
+    dup 4 1 roll
+    % next-queue old-steps x y old-steps
+    3 copy pop {
+      aload pop
+      % next-queue old-steps x y prev-steps x y neighbor-x neighbor-y
+      stepmap 3 1 roll getxy
+      % next-queue old-steps x y prev-steps x y neighbor-steps
+      1 add
+      % next-queue old-steps x y prev-steps x y new-steps
+      3 1 roll pop pop
+      % next-queue old-steps x y prev-steps new-steps
+      2 copy gt { exch } if pop
+      % next-queue old-steps x y min-steps
+    } forall-dest-neighbors
+    % next-queue old-steps x y min-steps
+    3 copy pop zmap 3 1 roll getxy
+    % next-queue old-steps x y min-steps z
+    97 eq {
+      (  ) show
+      dup 15 string cvs show
+    } if
+    % next-queue old-steps x y min-steps
+    dup 5 4 roll
+    % next-queue x y min-steps min-steps old-steps
+    lt {
+      % next-queue x y min-steps
+      3 copy pop {
+        aload pop
+        % next-queue x y min-steps x y neighbor-x neighbor-y
+        4 2 roll pop pop
+        % next-queue x y min-steps neighbor-x neighbor-y
+        5 index 3 1 roll enqueue
+        % next-queue x y min-steps
+      } forall-source-neighbors
+      % next-queue x y min-steps
+      stepmap 4 1 roll putxy
+    }
+    { pop pop pop }
+    ifelse
+    % next-queue
+  } forall
+} loop
+
+showpage
+quit
