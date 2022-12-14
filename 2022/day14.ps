@@ -1,0 +1,311 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day14.ps <day14.txt | display
+
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+% x y -> valid?
+/xy-valid? {
+  % x y
+  1 index min-x ge
+  % x y x≥min-x
+  2 index max-x le and
+  % x y x-valid?
+  1 index min-y ge
+  % x y x-valid? y≥min-y
+  2 index max-y le and
+  % x y x-valid? y-valid?
+  and
+  % x y valid?
+  3 1 roll pop pop
+  % valid?
+} bind def
+
+% composite x y -> element
+/getxy {
+  2 copy xy-valid? not { min-x min-y max-x max-y 1.125 pstack quit } if
+  % composite x y
+  min-y sub width mul add min-x sub
+  % composite offset
+  get
+} bind def
+
+% composite x y element ->
+/putxy {
+  3 copy pop xy-valid? not { min-x min-y max-x max-y 2.125 pstack quit } if
+  % compose x y element
+  3 1 roll
+  % compose element x y
+  min-y sub width mul add min-x sub
+  % compose element offset
+  exch put
+} bind def
+
+% source dest -> delta
+/get-delta {
+  2 copy eq
+  { pop pop 0 }
+  { lt { 1 } { -1 } ifelse }
+  ifelse
+} bind def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% (X,Y) -> [X Y]
+/parse-point {
+  % (X,Y)
+  (,) search
+  not { 3.125 pstack quit } if
+  % (Y) (,) (X)
+  exch pop
+  % (Y) (X)
+  cvi exch cvi
+  % X Y
+  2 array astore
+  % [X Y]
+} bind def
+
+/data [
+  {
+    datafile 300 string readline
+    not { pop exit } if
+    % line
+    [ exch {
+      % mark prev-points (suffix)
+      ( -> ) search
+      { % mark prev-points (next-suffix) ( -> ) (point)
+        exch pop
+        % mark prev-points (next-suffix) (point)
+        parse-point
+        % mark prev-points (next-suffix) point
+        exch
+        % mark prev-points point (next-suffix)
+      }
+      { % mark prev-points (point)
+        parse-point exit
+      }
+      ifelse
+      % mark prev-points point (next-suffix)
+    } loop ]
+    % point-array
+  } loop
+] def
+
+/source-x 500 def
+/source-y 0 def
+
+source-x source-y 2 copy
+% source-X source-Y source-X source-Y
+data {
+  % prev-min-X prev-min-Y prev-max-X prev-max-Y points
+  {
+    % prev-min-X prev-min-Y prev-max-X prev-max-Y point
+    aload pop
+    % prev-min-X prev-min-Y prev-max-X prev-max-Y X Y
+    6 5 roll
+    % prev-min-Y prev-max-X prev-max-Y X Y prev-min-X
+    2 index 1 index lt
+    { pop 1 index } if
+    % prev-min-Y prev-max-X prev-max-Y X Y min-X
+    6 5 roll
+    % prev-max-X prev-max-Y X Y min-X prev-min-Y
+    2 index 1 index lt
+    { pop 1 index } if
+    % prev-max-X prev-max-Y X Y min-X min-Y
+    6 5 roll
+    % prev-max-Y X Y min-X min-Y prev-max-X
+    4 index 1 index gt
+    { pop 3 index } if
+    % prev-max-Y X Y min-X min-Y max-X
+    6 5 roll
+    % X Y min-X min-Y max-X prev-max-Y
+    4 index 1 index gt
+    { pop 3 index } if
+    % X Y min-X min-Y max-X max-Y
+    6 4 roll pop pop
+    % min-X min-Y max-X max-Y
+  } forall
+} forall
+% min-X min-Y max-X max-Y
+/max-y exch def
+/max-x exch def
+/min-y exch def
+/min-x exch def
+/width max-x min-x sub 1 add def
+/height max-y min-y sub 1 add def
+
+% (map) ->
+/dump-map {
+  % (map)
+  0 1 height 1 sub {
+    % (map) y
+    width mul
+    % (map) offset
+    1 index exch width getinterval
+    % (map) (line)
+    stderr exch writestring
+    stderr 10 write
+    % (map)
+  } for
+} bind def
+
+/init-map width height mul string def
+0 1 width height mul 1 sub {
+  init-map exch 46 put % `.`
+} for
+data {
+  % point-list
+  apop
+  % other-points first-point
+  aload pop 3 2 roll
+  % first-X first-Y other-points
+  {
+    % prev-X prev-Y cur-point
+    aload pop
+    % prev-X prev-Y cur-X cur-Y
+    3 index 2 index get-delta
+    % prev-X prev-Y cur-X cur-Y dX
+    3 index 2 index get-delta
+    % prev-X prev-Y cur-X cur-Y dX dY
+    6 4 roll {
+      % cur-X cur-Y dX dY X Y
+      2 copy init-map 3 1 roll
+      % cur-X cur-Y dX dY X Y init-map X Y
+      35 putxy % `#`
+      % cur-X cur-Y dX dY X Y
+      5 index 2 index eq
+      % cur-X cur-Y dX dY X Y X-done?
+      5 index 2 index eq and
+      % cur-X cur-Y dX dY X Y done?
+      { exit } if
+      % cur-X cur-Y dX dY X Y
+      exch 3 index add exch 2 index add
+      % cur-X cur-Y dX dY next-X next-Y
+    } loop
+    % cur-X cur-Y dX dY cur-X cur-Y
+    pop pop pop pop
+    % cur-X cur-Y
+  } forall
+  % final-X final-Y
+  pop pop
+} forall
+
+/end-map init-map dup length string copy def
+
+% init-map -> final-map cycle-count
+/run-map {
+  % init-map
+  dup length string copy
+  % map
+  0 exch
+  % cycle-count map
+  {
+    dup source-x source-y getxy 46 eq not { exit } if
+    % cycle-count map
+    source-x source-y {
+      % cycle-count map X Y
+      dup 1 add max-y gt { true exit } if
+      % cycle-count map X Y
+      3 copy 1 add getxy 46 eq
+      % cycle-count map X Y below-free?
+      { 1 add
+        % cycle-count map next-X next-Y
+      }
+      { % cycle-count map X Y
+        1 index 1 sub min-x lt { true exit } if
+        % cycle-count map X Y
+        3 copy exch 1 sub exch 1 add getxy 46 eq
+        % cycle-count map X Y below-left-free?
+        { exch 1 sub exch 1 add
+          % cycle-count map next-X next-Y
+        }
+        { % cycle-count map X Y
+          1 index 1 add max-x gt { true exit } if
+          % cycle-count map X Y
+          3 copy exch 1 add exch 1 add getxy 46 eq
+          % cycle-count map X Y below-right-free?
+          { exch 1 add exch 1 add
+            % cycle-count map next-X next-Y
+          }
+          { false exit }
+          ifelse
+       }
+       ifelse
+       % cycle-count map next-X next-Y
+      }
+      ifelse
+     % cycle-count map next-X next-Y
+    } loop
+    % cycle-count map final-X final-Y dropped-out?
+    { pop pop exit } if
+    % cycle-count map final-X final-Y
+    2 index 3 1 roll 111 putxy % `o`
+    % cycle-count updated-map
+    exch 1 add exch
+    % updated-cycle-count updated-map
+  } loop
+  % cycle-count map
+  exch
+} bind def
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+init-map run-map
+15 string cvs show
+pop
+
+(Second Puzzle: )
+72 664 moveto show
+%%% add height columns left and right, and two lines below
+/init-map2 width height dup add add height 2 add mul string def
+0 1 init-map2 length 1 sub {
+  init-map2 exch 46 put
+} for
+width height dup add add height 1 add mul
+1
+init-map2 length 1 sub {
+  init-map2 exch 35 put % `#`
+} for
+0 1 height 1 sub {
+  % y
+  dup width mul
+  % y orig-offset
+  init-map exch width getinterval
+  % y orig-line
+  exch width height dup add add mul height add
+  % orig-line new-offset
+  exch init-map2 3 1 roll putinterval
+  %
+} for
+/min-x min-x height sub def
+/max-x max-x height add def
+/max-y max-y 2 add def
+/width max-x min-x sub 1 add def
+/height max-y min-y sub 1 add def
+init-map2 run-map
+15 string cvs show
+pop
+
+showpage
+quit
