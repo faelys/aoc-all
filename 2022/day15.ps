@@ -1,0 +1,287 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day15.ps <day15.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+% [ item_0 ... item_n-1 ] item_n -> [ item_0 item_1 ... item_n ]
+/aappend {
+  exch aload length
+  % new-item item-0 item-1 ... item-n-1 n
+  dup dup 2 add exch 1 add roll
+  % item-0 item-1 ... item-n-1 n new-item
+  exch
+  % item-0 item-1 ... item-n-1 new-item n
+  1 add array astore
+} bind def
+
+% [ item_0 item_1 ... item_n ] -> [ item_1 ... item_n ] item_0
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+% min any max any num -> updated-min any updated-max any
+/update-min-max {
+  % min any max any num
+  4 index 1 index gt
+  % min any max any num min>num?
+  { 5 4 roll pop dup 5 1 roll } if
+  % updated-min any max any num
+  2 index 1 index lt
+  % updated-min any max any num max<num?
+  { 3 2 roll pop dup 3 1 roll } if
+  % updated-min any updated-max any num
+  pop
+  % updated-min any updated-max any
+} bind def
+
+% [[S1x S1y B1x B1y] [S2x S2y B2x B2y] ... [Snx Sny Bnx Bny]]
+/data [
+  {
+    datafile 200 string readline
+    not { pop exit } if
+    % (Sensor at x=Sx, y=Sy: closest beacon is at x=Bx, y=By)
+    (Sensor at x=) anchorsearch
+    not { pstack quit } if
+    pop
+    % (Sx, y=Sy: closest beacon is at x=Bx, y=By)
+    (, y=) search
+    not { pstack quit } if
+    cvi exch pop exch
+    % Sx (Sy: closest beacon is at x=Bx, y=By)
+    (: closest beacon is at x=) search
+    not { pstack quit } if
+    cvi exch pop exch
+    % Sx Sy (Bx, y=By)
+    (, y=) search
+    not { pstack quit } if
+    cvi exch pop exch cvi
+    % Sx Sy Bx By
+    4 array astore
+    % [Sx Sy Bx By]
+  } loop
+] def
+
+data 0 get 0 get
+data 0 get 1 get
+2 copy
+data {
+  % min-x min-y max-x max-y [Sx Sy Bx By]
+  dup length 4 eq not { 1.125 pstack quit } if
+  aload pop
+  % min-x min-y max-x max-y Sx Sy Bx By
+  8 2 roll
+  % Bx By min-x min-y max-x max-y Sx Sy
+  update-min-max
+  % Bx By min-x min-y max-x max-y Sx
+  update-min-max
+  % Bx By min-x min-y max-x max-y
+  6 4 roll
+  % min-x min-y max-x max-y Bx By
+  update-min-max
+  % min-x min-y max-x max-y Bx
+  update-min-max
+  % min-x min-y max-x max-y
+} forall
+/max-y exch def
+/max-x exch def
+/min-y exch def
+/min-x exch def
+
+% interval-list min-x max-x -> updated-interval-list
+/add-interval {
+  false
+  [
+    % interval-list min-x max-x inserted? mark
+    4 1 roll 5 4 roll
+    % mark min-x max-x inserted? interval-list
+    {
+      dup length 2 eq not { 4.125 pstack quit } if
+      aload pop
+      % mark prev-items new-min new-max inserted? cur-min cur-max
+      { %%% 1-iteration loop to use `exit` as a short circuit
+        4 index 1 index 1 add gt
+        % mark prev-items new-min new-max inserted? cur-min cur-max fully-before?
+        { 2 array astore 4 1 roll exit
+          % mark items new-min new-max inserted?
+        } if
+        % mark prev-items new-min new-max inserted? cur-min cur-max
+        3 index 1 add 2 index lt
+        % mark prev-items new-min new-max inserted? cur-min cur-max fully-after?
+        { 2 array astore
+          % mark prev-items new-min new-max inserted? cur-item
+          1 index
+          { 4 1 roll
+            % mark prev-items cur-item new-min new-max inserted?
+          }
+          {
+            3 index 3 index 2 array astore
+            % mark prev-items new-min new-max inserted? cur-item new-item
+            exch 5 2 roll pop true
+            % mark prev-items cur-item new-item new-min new-max inserted?
+          }
+          ifelse
+          exit
+        } if
+        % mark prev-items new-min new-max inserted? cur-min cur-max
+        4 index 2 index gt
+        % mark prev-items new-min new-max inserted? cur-min cur-max new-min>cur-min?
+        { 5 4 roll pop 1 index 5 1 roll } if
+        % mark prev-items merged-min new-max inserted? cur-min cur-max
+        3 index 1 index lt
+        % mark prev-items merged-min new-max inserted? cur-min cur-max new-max<cur-max?
+        { 4 3 roll pop dup 4 1 roll } if
+        % mark prev-items merged-min merged-max inserted? cur-min cur-max
+        pop pop
+        % mark prev-items merged-min merged-max inserted?
+        exit
+      } loop
+      % mark items-so-far new-min new-max inserted?
+    } forall
+    % mark items new-min new-max inserted?
+    { pop pop }
+    { 2 array astore }
+    ifelse
+    % mark items
+  ]
+} bind def
+
+
+% data y -> interval-array
+/interval-list {
+  % data y
+  [] 3 2 roll
+  {
+    % y interval-list [Sx Sy Bx By]
+    dup length 4 eq not { 2.125 pstack quit } if
+    aload pop
+    % y interval-list Sx Sy Bx By
+    2 index 1 index sub abs
+    % y interval-list Sx Sy Bx By delta-y
+    4 index 3 index sub abs add
+    % y interval-list Sx Sy Bx By dist
+    6 index 4 index sub abs
+    % y interval-list Sx Sy Bx By dist abs(Sy-y)
+    2 copy ge
+    {
+      % y interval-list Sx Sy Bx By dist abs(Sy-y)
+      sub
+      % y interval-list Sx Sy Bx By h-dist
+      4 index 1 index 2 copy sub 3 1 roll add
+      % y interval-list Sx Sy Bx By h-dist min-x max-x
+%     8 index 4 index eq
+%     % y interval-list Sx Sy Bx By h-dist min-x max-x y=By?
+%     {
+%       % y interval-list Sx Sy Bx By h-dist min-x max-x
+%       2 index 0 eq
+%       { pop pop pop pop pop pop pop }
+%       { % y interval-list Sx Sy Bx By h-dist min-x max-x
+%         4 index 1 index eq
+%         { 1 sub }
+%         { 4 index 2 index eq
+%           { exch 1 add exch }
+%           { 3.125 pstack quit }
+%           ifelse
+%         } ifelse
+%         % y interval-list Sx Sy Bx By h-dist fixed-min-x fixed-max-x
+%         7 2 roll pop pop pop pop pop
+%         % y interval-list fixed-min-x fixed-max-x
+%         add-interval
+%         % y updated-interval-list
+%       } ifelse
+%     }
+%     {
+        % y interval-list Sx Sy Bx By h-dist min-x max-x
+        7 2 roll pop pop pop pop pop
+        % y interval-list fixed-min-x fixed-max-x
+        add-interval
+        % y updated-interval-list
+%     }
+%     ifelse
+      % y updated-interval-list
+    }
+    { pop pop pop pop pop pop }
+    ifelse
+    % y updated-interval-list
+  } forall
+  % y final-interval-list
+  exch pop
+  % final-interval-list
+} bind def
+
+% data y -> count
+/position-count {
+  % data y
+  interval-list
+  % interval-array
+  0 exch
+  {
+    % accumulator interval
+    aload pop
+    % accumulator min max
+    exch sub 1 add
+    % accumulator interval-size
+    add
+  } forall
+  % total
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+data 10 position-count
+% for my input: data 2000000 position-count
+15 string cvs show
+
+
+(Second Puzzle:)
+72 664 moveto show
+
+0 1 20
+% for my input: 0 1 4000000
+{
+  % y
+  dup data exch
+  % y data y
+  interval-list
+  % y interval-list
+  dup length 2 ge
+  { 0 get 1 get 1 add
+    % y x
+    4000000 mul add
+    % result
+    ( ) show
+    15 string cvs show
+  }
+  { pop pop }
+  ifelse
+} for
+
+
+showpage
+quit
