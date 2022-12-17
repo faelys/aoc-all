@@ -1,0 +1,471 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day16.ps <day16.txt | display
+
+% (str1) (str2) -> (str1str2)
+/strcat {
+  % (str1) (str2)
+  dup length
+  % (str1) (str2) str2-len
+  2 index length add
+  % (str1) (str2) result-len
+  string
+  % (str1) (str2) (null)
+  3 copy exch 3 2 roll length exch
+  % (str1) (str2) (null) (null) str1-len (str2)
+  putinterval
+  % (str1) (str2) (nullstr2)
+  exch pop
+  % (str1) (nullstr2)
+  dup 3 2 roll
+  % (nullstr2) (nullstr2) (str1)
+  0 exch putinterval
+  % (str1str2)
+} bind def
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+% [ item_0 item_1 ... item_n ] -> [ item_1 ... item_n ] item_0
+/apop {
+  aload length 1 sub array astore exch
+} bind def
+
+
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+
+/id-dict   100 dict def
+/rate-dict 100 dict def
+/link-dict 100 dict def
+0
+{
+  1 add
+  % id
+  datafile 300 string readline
+  not { pop exit } if
+  % id (Valve AA has flow rate=0; tunnels lead to valves DD, II, BB)
+  (Valve ) anchorsearch
+  not { pstack quit } if
+  pop
+  % id (AA has flow rate=0; tunnels lead to valves DD, II, BB)
+  ( has flow rate=) search
+  not { pstack quit } if
+  exch pop exch
+  % id key (0; tunnels lead to valves DD, II, BB)
+  (; ) search
+  not { pstack quit } if
+  exch pop cvi exch
+  % id key rate (tunnels lead to valves DD, II, BB)
+  [ exch
+    % key rate mark (tunnels lead to valves DD, II, BB)
+    (tunnel leads to valve ) anchorsearch
+    { pop }
+    { (tunnels lead to valves ) anchorsearch
+      not { pstack quit } if
+      pop
+      % key rate mark (DD, II, BB)
+      {
+        % prev-conections suffix
+        (, ) search
+        { exch pop exch
+          % prev-connections cur-connection next-suffix
+        }
+        { % prev-connections last-connection
+          exit
+        }
+        ifelse
+      } loop
+      % key rate mark connections
+    }
+    ifelse
+  ]
+  % id key rate connections
+  link-dict exch 3 index exch put
+  % id key rate
+  id-dict 2 index 4 index put
+  % id key rate
+  rate-dict 3 1 roll put
+  % id
+} loop
+% first-unused-id
+1 sub dup mul dict /shortest-path-length exch def
+
+/dump-shortest-path-length {
+  stderr (  ) writestring
+  id-dict {
+    pop 2 string cvs
+    stderr 32 write
+    stderr exch writestring
+  } forall
+  stderr 10 write
+  id-dict {
+    pop 2 string cvs
+    % (start)
+    stderr 1 index writestring
+    id-dict {
+      pop 2 string cvs
+      % (start) (end)
+      1 index exch strcat
+      % (start) (startend)
+      shortest-path-length 1 index known
+      % (start) (startend) known?
+      { shortest-path-length exch get
+        % (start) length
+        15 string cvs
+        % (start) (length)
+        3 string
+        % (start) (length) (cell)
+        0 1 2 index length 1 sub {
+          % (start) (length) (cell) offset
+          1 index exch 32 put
+          % (start) (length) (cell)
+        } for
+        % (start) (length) (cell)
+        dup dup length 3 index length sub
+        % (start) (length) (cell) (cell) offset
+        4 3 roll putinterval
+        % (start) (cell)
+      }
+      { pop (  .) }
+      ifelse
+      % (start) (cell)
+      stderr exch writestring
+      % (start)
+    } forall
+    % (start)
+    pop
+    %
+    stderr 10 write
+  } forall
+} bind def
+
+%%% seed shortest-path-length with 0-step and 1-step paths
+link-dict {
+  % start dest-list
+  exch 2 string cvs exch
+  % start dest-list
+  {
+    % start dest
+    1 index exch strcat
+    % start startdest
+    shortest-path-length exch 1 put
+    % start
+  } forall
+  % start
+  dup strcat
+  % startstart
+  shortest-path-length exch 0 put
+  %
+} forall
+
+%%% extend paths while shortest-path-length is not full
+1 {
+  % prev-step-rank
+  1 add
+  % step-rank
+  shortest-path-length length shortest-path-length maxlength eq
+  % step-rank finished?
+  { exit } if
+  %
+  link-dict {
+    % step-rank step-start step-dest-list
+    exch 2 string cvs exch
+    % step-rank step-start step-dest-list
+    {
+      % step-rank step-start step-dest
+      shortest-path-length {
+        % step-rank step-start step-dest path-key path-len
+        dup 1 add 5 index eq
+        {
+          % step-rank step-start step-dest path-key path-len
+          exch 4 string cvs
+          % step-rank step-start step-dest path-len path-key
+          dup 2 2 getinterval
+          % step-rank step-start step-dest path-len path-key path-suffix
+          4 index eq
+          % step-rank step-start step-dest path-len path-key step-extends-path?
+          { % step-rank step-start step-dest path-len path-key
+            0 2 getinterval 2 index strcat
+            % step-rank step-start step-dest path-len new-path-key
+            shortest-path-length 1 index known
+            % step-rank step-start step-dest path-len new-path-key new-path-known?
+            { pop pop }
+            { % step-rank step-start step-dest path-len new-path-key
+              exch 1 add
+              % step-rank step-start step-dest new-path-key new-path-len
+              shortest-path-length 3 1 roll put
+              % step-rank step-start step-dest
+            }
+            ifelse
+            % step-rank step-start step-dest
+          }
+          { pop pop }
+          ifelse
+          % step-rank step-start step-dest
+        }
+        { pop pop }
+        ifelse
+        % step-rank step-start step-dest
+      } forall
+      % step-rank step-start step-dest
+      pop
+      % step-rank step-start
+    } forall
+    % step-rank step-start
+    pop
+  } forall
+  % step-rank
+} loop
+
+%dump-shortest-path-length quit
+
+/nz-valve-list [
+  rate-dict {
+    % name rate
+    0 eq
+    { pop }
+    { 2 string cvs }
+    ifelse
+  } forall
+] def
+
+/nz-id-dict <<
+  0 nz-valve-list {
+    % prev-count name
+    exch
+    % name prev-count
+    dup 1 add
+    % name prev-count count
+  } forall
+  % name1 rank1 ... namen rankn count
+  pop
+>> def
+
+% id -> bitset
+/nz-id-mask {
+  % id
+  nz-id-dict exch get
+  % rank
+  1 exch { 2 mul } repeat
+  % bitset
+} bind def
+
+/nz-count nz-valve-list length def
+/nz-pow 1 nz-count { 2 mul } repeat def
+
+% set id -> bool
+/nz-set-contains {
+  % set id
+  nz-id-mask
+  % set mask
+  and 0 eq not
+  % result
+} bind def
+
+% set id -> new-set
+/nz-set-include {
+  nz-id-mask or
+} bind def
+
+%%% best-score dictionary:
+%%%  starting-id * nz-pow + bitfield-of-available-valves
+%%%   -> array of score over time
+%%%      with index 0 being the minute of opening starting-id
+/best-score nz-count nz-pow mul dict def
+
+% [val1 val2 .. valn] i -> [0 .. 0 val1 val2 .. valn-i]
+/shift-array {
+  % [val1 val2 .. valn] i
+  dup { 0 exch } repeat
+  % [val1 val2 .. valn] 0 .. 0 i
+  dup 2 add dup 1 sub roll
+  % 0 .. 0 i [val1 val2 .. valn]
+  aload length
+  % 0 .. 0 i val1 val2 .. valn n
+  dup 2 add dup 1 sub roll
+  % 0 .. 0 val1 val2 .. valn n i
+  { exch pop } repeat
+  % 0 .. 0 val1 val2 .. valn-i n
+  array astore
+  % [0 .. 0 val1 val2 .. valn-i]
+} bind def
+
+% [val1a val2a ... valna] [val1b val2b ... valmb]
+% -> [max(val1a,val1b) max(val2a,val2b) ... max(val(min(m,n))a, val(min(m,n))b)
+/each-max-array {
+  % [val1a val2a ... valna] [val1b val2b ... valmb]
+  0 1 3 index length 3 index length
+  % [val1a val2a ... valna] [val1b val2b ... valmb] 0 1 n m
+  2 copy gt { exch } if pop
+  % [val1a val2a ... valna] [val1b val2b ... valmb] 0 1 min(m,n)
+  [ 6 1 roll
+    % mark [val1a val2a ... valna] [val1b val2b ... valmb] 0 1 min(m,n)
+    1 sub {
+      % prev-items [val1a val2a ... valna] [val1b val2b ... valmb] i
+      2 index 1 index get
+      % prev-items [val1a val2a ... valna] [val1b val2b ... valmb] i valia
+      exch 2 index exch get
+      % prev-items [val1a val2a ... valna] [val1b val2b ... valmb] valia valib
+      2 copy lt { exch } if pop
+      % prev-items [val1a val2a ... valna] [val1b val2b ... valmb] cur-item
+      3 1 roll
+      % prev-items cur-item [val1a val2a ... valna] [val1b val2b ... valmb]
+    } for
+    % mark items [val1a val2a ... valna] [val1b val2b ... valmb]
+    pop pop
+  ]
+} bind def
+
+% starting-node available-mask -> best-score-array
+/best-score-from {
+  % starting-node mask
+  []
+  % starting-node mask cur-best
+  nz-valve-list {
+    % starting-node mask prev-best next-node
+    2 index 1 index nz-set-contains
+    % starting-node mask prev-best next-node next-node-in-mask?
+    { % starting-node mask prev-best next-node
+      nz-id-dict 1 index get
+      % starting-node mask prev-best next-node next-node-num
+      nz-pow mul 3 index add
+      % starting-node mask prev-best next-node next-node-key
+      best-score exch get
+      % starting-node mask prev-best next-node best-score-from-next-node
+      4 index 2 index strcat
+      shortest-path-length exch get
+      shift-array
+      % starting-node mask prev-best next-node best-score-from-starting-node
+      exch pop
+      % starting-node mask prev-best best-score-from-starting-node
+      1 index length 0 eq
+      { exch pop }
+      { each-max-array }
+      ifelse
+      % starting-node mask cur-best
+    }
+    { pop }
+    ifelse
+    % starting-node mask cur-best
+  } forall
+  % starting-node mask best-score-array
+  3 1 roll pop pop
+  % best-score-array
+} bind def
+
+%%% seed the score dictionary with single-valves and prepate todo-dict
+nz-count dict
+nz-valve-list {
+  % prev-todo valve-name
+  rate-dict 1 index get
+  % prev-todo valve-name rate
+  1 index nz-id-mask
+  % prev-todo valve-name rate mask
+  3 index 1 index 1 put
+  % todo valve-name rate mask
+  nz-id-dict 3 index get
+  % todo valve-name rate mask valve-num
+  nz-pow mul add
+  % todo valve-name rate key
+  exch [ exch 0 exch
+  % todo valve-name key [ 0 rate
+  dup 30 mul { } for ]
+  % todo valve-name key score-array
+  best-score 3 1 roll put
+  % todo valve-name
+  pop
+} forall
+% todo-dict
+
+{
+  % todo-dict
+  [ exch { pop } forall ]
+  % todo-list
+  stderr (Cycle with ) writestring
+  stderr 1 index length 15 string cvs writestring
+  stderr ( to do\012) writestring
+  stderr flushfile
+  % cur-todo
+  dup length 0 eq { exit } if
+  % cur-todo
+  nz-pow dict exch
+  % next-todo cur-todo
+  {
+    % next-todo cur-mask
+    nz-valve-list {
+      % next-todo cur-mask new-valve
+      2 copy nz-set-contains
+      { pop }
+      { % next-todo cur-mask new-valve
+        rate-dict 1 index get
+        % next-todo cur-mask new-valve rate
+        1 index 3 index best-score-from
+        % next-todo cur-mask new-valve rate best-score-from-new-valve
+        1 shift-array
+        % next-todo cur-mask new-valve rate shifted-best-score
+        1 1 2 index length 1 sub {
+          % ... rate best-score index
+          2 copy get
+          % ... rate best-score index prev-value
+          3 index 2 index mul add
+          % ... rate best-score index new-value
+          2 index 3 1 roll put
+          % ... rate updated-best-score
+        } for
+        % next-todo cur-mask new-valve rate best-score-with-new-valve
+        exch pop
+        % next-todo cur-mask new-valve best-score-with-new-valve
+        2 index 2 index nz-set-include
+        % next-todo cur-mask new-valve best-score-with-new-valve new-mask
+        4 index 1 index 1 put
+        % next-todo cur-mask new-valve best-score-with-new-valve new-mask
+        3 2 roll
+        % next-todo cur-mask best-score-with-new-valve new-mask new-valve
+        nz-id-dict exch get nz-pow mul add
+        % next-todo cur-mask best-score-with-new-valve new-key
+        exch best-score 3 1 roll put
+        % next-todo cur-mask
+      }
+      ifelse
+      % next-todo cur-mask
+    } forall
+    % next-todo cur-mask
+    pop
+  } forall
+  % next-todo
+} loop
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+(AA) nz-pow 1 sub best-score-from
+29 get
+15 string cvs show
+
+
+showpage
+quit
