@@ -467,5 +467,37 @@ nz-valve-list {
 15 string cvs show
 
 
+(Second Puzzle: )
+72 664 moveto show
+0 0 1 1 nz-pow 2 sub {
+  % prev-progress prev-best my-mask
+  dup 100 mul nz-pow 2 sub idiv
+  % prev-progress prev-best my-mask cur-progress
+  3 index 1 index eq
+  { pop }
+  { stderr (\015Second puzzle at ) writestring
+    stderr 1 index 15 string cvs writestring
+    stderr (%) writestring
+    stderr flushfile
+    % prev-progress prev-best my-mask cur-progress
+    4 1 roll 3 2 roll pop
+    % cur-progress prev-best my-mask
+  }
+  ifelse
+  % progress prev-best my-mask
+  nz-pow 1 sub 1 index sub
+  % progress prev-best my-mask elephant-mask
+  (AA) exch best-score-from 25 get
+  % progress prev-best my-mask elephant-score
+  exch (AA) exch best-score-from 25 get
+  % progress prev-best elephant-score my-score
+  add
+  % progress prev-best total-score
+  2 copy lt { exch } if pop
+  % progress best-score
+} for
+stderr 10 write
+15 string cvs show
+
 showpage
 quit
