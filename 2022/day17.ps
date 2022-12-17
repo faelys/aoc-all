@@ -1,0 +1,273 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day17.ps <day17.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data datafile 10100 string readline not { quit } if def
+
+/width 7 def
+
+% height -> arena
+/new-arena {
+  % height
+  width mul dup string exch
+  % new-arena length
+  1 sub
+  % new-arena last-index
+  0 1 3 2 roll {
+    % new-arena index
+    1 index exch 46 put % `.`
+    % new-arena
+  } for
+  % new-arena
+} bind def
+
+% arena ->
+/dump-arena {
+  % arena
+  dup length width sub
+  % arena first-index
+  width neg 0 {
+    % arena cur-index
+    1 index exch width getinterval
+    % arena cur-line
+    stderr exch writestring
+    stderr 10 write
+    % arena
+  } for
+  % arena
+  pop
+} bind def
+
+%%% [dx dy] of cells used by each shape, from the bottom left corner
+/shapes [
+  %%% -
+  [[0 0] [1 0] [2 0] [3 0]]
+  %%% +
+  [[1 0] [0 1] [1 1] [2 1] [1 2]]
+  %%% J
+  [[0 0] [1 0] [2 0] [2 1] [2 2]]
+  %%% I
+  [[0 0] [0 1] [0 2] [0 3]]
+  %%% O
+  [[0 0] [1 0] [0 1] [1 1]]
+] def
+
+% arena shape-id x y -> bool
+/shape-fits? {
+  % arena shape-id x y
+  3 2 roll shapes length mod shapes exch get
+  % arena x y cell-array
+  true exch
+  % arena x y result cell-array
+  {
+    % arena x y result cur-cell
+    aload pop
+    % arena x y result dx dy
+    3 index add exch 4 index add
+    % arena x y result cell-y cell-x
+    dup 0 ge
+    % arena x y result cell-y cell-x cell-x>=0?
+    1 index width lt and
+    % arena x y result cell-y cell-x cell-x-valid?
+    2 index 0 ge and
+    % arena x y result cell-y cell-x cell-xy-valid?
+    { exch width mul add
+      % arena x y result cell-offset
+      4 index exch get
+      % arena x y result cell-char
+      46 eq
+      % arena x y result cell-empty?
+      not { pop false exit } if
+      % arena x y result
+    }
+    { pop pop pop false exit }
+    ifelse
+    % arena x y result
+  } forall
+  % arena x y result
+  4 1 roll pop pop pop
+  % result
+} bind def
+
+% arena shape-id x y char ->
+/put-shape {
+  % arena shape-id x y char
+  4 3 roll
+  % arena x y char shape-id
+  shapes length mod shapes exch get
+  % arena x y char cell-array
+  {
+    % arena x y char cur-cell
+    aload pop
+    % arena x y char dx dy
+    3 index add exch 4 index add exch
+    % arena x y char cell-x cell-y
+    width mul add
+    % arena x y char cell-offset
+    4 index exch 2 index put
+    % arena x y char
+  } forall
+  % arena x y char
+  pop pop pop pop
+  %
+} bind def
+
+% arena -> y
+/top-used-line {
+  % arena
+  dup length width idiv 1 sub
+  % arena max-y
+  {
+    % arena cur-y
+    dup 0 lt { exit } if
+    % arena cur-y
+    true
+    % arena cur-y line-empty?
+    0 1 width 1 sub {
+      % arena cur-y line-empty? cur-x
+      2 index width mul add
+      % arena cur-y line-empty? cur-offset
+      3 index exch get
+      % arena cur-y line-empty? cur-cell
+      46 eq
+      % arena cur-y line-empty? cur-cell-empty?
+      not { pop false exit } if
+      % arena cur-y line-empty?
+    } for
+    % arena cur-y line-empty?
+    not { exit } if
+    % arena cur-y
+    1 sub
+    % arena next-y
+  } loop
+  % arena result
+  exch pop
+  % result
+} bind def
+
+% arena empty-lines-needed -> new-arena
+/ensure-lines {
+  % arena empty-lines-needed
+  1 index top-used-line 1 add
+  % arena empty-lines-needed lines-used
+  add
+  % arena total-lines-needed
+  width mul
+  % arena total-length-needed
+  1 index length 1 index ge
+  % arena total-length-needed arena-is-big-enough?
+  { pop }
+  { % arena total-length-needed
+    dup string exch
+    % old-arena new-arena new-arena-length
+    2 index length exch
+    % old-arena new-arena old-arena-length new-arena-length
+    1 sub 1 exch {
+      % old-arena new-arena new-index
+      1 index exch 46 put
+      % old-arena new-arena
+    } for
+    % old-arena new-arena
+    dup 0 4 3 roll putinterval
+    % new-arena
+  }
+  ifelse
+  % arena
+} bind def
+
+% arena -> shape-x shape-y
+/create-shape {
+  % arena
+  top-used-line 4 add
+  % shape-y
+  2 exch
+  % shape-x shape-y
+} bind def
+
+% prev-arena prev-shape-id prev-time -> arena last-shape-id last-time
+/simulate-rock {
+  % prev-arena prev-shape-id prev-time
+  exch 1 add exch
+  % prev-arena shape-id prev-time
+  3 2 roll 7 ensure-lines 3 1 roll
+  % arena shape-id prev-time
+  2 index create-shape
+  % arena shape-id prev-time shape-x shape-y
+  {
+    % arena shape-id prev-time shape-x shape-y
+    3 2 roll 1 add dup 4 1 roll
+    % arena shape-id time shape-x shape-y time
+    data length mod
+    % arena shape-id time shape-x shape-y move-offset
+    data exch get
+    % arena shape-id time shape-x shape-y move-char
+    dup 60 eq
+    % arena shape-id time shape-x shape-y move-char move-left?
+    { pop -1 }
+    { 62 eq
+      % arena shape-id time shape-x shape-y move-right?
+      { 1 }
+      { 1.125 pstack quit }
+      ifelse
+    }
+    ifelse
+    % arena shape-id time shape-x shape-y dx
+    2 index add
+    % arena shape-id time shape-x shape-y new-shape-x
+    5 index 5 index 2 index 4 index shape-fits?
+    % arena shape-id time shape-x shape-y new-shape-x x-move-ok?
+    { exch 3 2 roll pop }
+    { pop }
+    ifelse
+    % arena shape-id time shape-x shape-y
+    4 index 4 index 3 index 3 index 1 sub shape-fits?
+    % arena shape-id time shape-x shape-y y-move-ok?
+    { 1 sub }
+    { % arena shape-id time shape-x shape-y
+      4 index 4 index 4 2 roll
+      % arena shape-id time arena shape-id shape-x shape-y
+      35 put-shape % `#`
+      % updated-arena shape-id time
+      exit
+    }
+    ifelse
+    % arena shape-id time shape-x shape-y
+  } loop
+  % updated-arena new-shape-id time
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+10 new-arena -1 -1
+% arena shape-id time
+2022 { simulate-rock } repeat
+% arena last-shape-id last-time
+pop pop top-used-line 1 add
+% tower-height
+15 string cvs show
+
+showpage
+quit
