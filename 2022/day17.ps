@@ -163,6 +163,92 @@
   % result
 } bind def
 
+% arena -> height-array
+/column-heights {
+  % arena
+  [ exch 0 1 width 1 sub {
+      % mark prev-heights arena x
+      1 index length width idiv
+      % mark prev-heights arena x max-y+1
+      {
+        % mark prev-heights arena x prev-y
+        1 sub
+        % mark prev-heights arena x y
+        dup 0 lt { exit } if
+        % mark prev-heights arena x y
+        dup width mul 2 index add
+        % mark prev-heights arena x y offset
+        3 index exch get 46 eq
+        % mark prev-heights arena x y cell-empty?
+        not { exit } if
+        % mark prev-heights arena x y
+      } loop
+      % mark prev-heights arena x y
+      3 1 roll pop
+      % mark prev-heights y arena
+    } for
+    % mark heights arena
+    pop
+  ]
+  % height-array
+} bind def
+
+% arena -> height-array
+/column-reverse-heights {
+  % arena
+  column-heights
+  % height-array
+  0 1 index {
+    % height-array prev-max cur-item
+    2 copy lt { exch } if pop
+    % height-array cur-max
+  } forall
+  % height-array max
+  exch
+  % max height-array
+  [ 3 1 roll
+    % mark max height-array
+    {
+      % mark prev-items max cur-height
+      1 index exch sub
+      % mark prev-items max cur-item
+      exch
+      % mark prev-items cur-item max
+    } forall
+    % mark items max
+    pop
+  ]
+  % reverse-height-array
+} bind def
+
+% array1 array2 -> bool
+/deep-eq {
+  % array1 array2
+  dup length
+  % array1 array2 length2
+  2 index length 1 index eq
+  { % array1 array2 length
+    true exch
+    % array1 array2 cur-result length
+    1 sub 0 1 3 2 roll {
+      % array1 array2 prev-result index
+      3 index 1 index get
+      % array1 array2 prev-result index item1
+      3 index 2 index get eq
+      % array1 array2 prev-result index item1=item2?
+      exch pop and
+      % array1 array2 cur-result
+      dup not { exit } if
+      % array1 array2 cur-result
+    } for
+    % array1 array2 result
+    3 1 roll pop pop
+    % result
+  }
+  { pop pop pop false }
+  ifelse
+} bind def
+
 % arena empty-lines-needed -> new-arena
 /ensure-lines {
   % arena empty-lines-needed
@@ -267,6 +353,363 @@
 % arena last-shape-id last-time
 pop pop top-used-line 1 add
 % tower-height
+15 string cvs show
+
+(Second Puzzle: )
+72 664 moveto show
+
+%%% Let's assume no rock will be tucked below an overhang,
+%%% So that the whole floor can be represented by the height difference
+%%% of each cell with the tallest one.
+%%% We will use the convention of Y positive downwards, and Y=0 for the
+%%% highest non-empty row.
+%%% The height difference array, rock shape, and wind index describe
+%%% completely a state, and will be looking for a cycle
+%%%
+%%% UPDATE: turns out the reference inputs don't involve such a tuck,
+%%% but my input does. So most of the simulation stuff below is not
+%%% good enough. Let's try assuming the height difference array is good
+%%% enough as a hash of the current state, and use the pedestrian
+%%% simulation to derive the state machine.
+
+/shape-width [
+  shapes {
+    % cell-array
+    0 exch {
+      % prev-max-dx cell
+      0 get
+      % prev-max-dx cur-dx
+      2 copy lt { exch } if pop
+      % max-dx
+    } forall
+    % max-dx
+    1 add
+  } forall
+] def
+
+% floor-array shape-id any shape-x shape-y -> bool
+/shape-fits-2 {
+  { %%% 1-iteration loop to use `exit` as a short circuit
+    % floor-array shape-id any shape-x shape-y
+    1 index 0 lt
+    % floor-array shape-id any shape-x shape-y shape-x<0
+    5 index length 5 index shape-width exch get sub
+    % floor-array shape-id any shape-x shape-y shape-x<0 max-shape-x
+    3 index lt or
+    % floor-array shape-id any shape-x shape-y shape-x-oob?
+    { pop pop pop pop pop false exit } if
+    % floor-array shape-id any shape-x shape-y
+    dup 0 lt
+    { pop pop pop pop pop true exit } if
+    % floor-array shape-id any shape-x shape-y
+    true 6 1 roll
+    % true floor-array shape-id any shape-x shape-y
+    shapes 4 index get {
+      % result floor-array shape-id any shape-x shape-y cell
+      aload pop
+      % result floor-array shape-id any shape-x shape-y dx dy
+      2 index exch sub
+      % result floor-array shape-id any shape-x shape-y dx cell-y
+      exch 3 index add
+      % result floor-array shape-id any shape-x shape-y cell-y cell-x
+      6 index exch get
+      % result floor-array shape-id any shape-x shape-y cell-y floor-height-at-x
+      ge {
+        % result floor-array shape-id any shape-x shape-y
+        6 5 roll pop false 6 1 roll
+        % result floor-array shape-id any shape-x shape-y
+        exit
+      } if
+      % result floor-array shape-id any shape-x shape-y
+    } forall
+    % result floor-array shape-id any shape-x shape-y
+    pop pop pop pop pop
+    % result
+    exit
+  } loop
+} bind def
+
+/wind-dx <<
+ 60 -1
+ 62  1
+>> def
+
+% floor-array shape-id wind-id shape-x shape-y
+%   -> floor-array shape-id wind-id shape-x shape-y finished?
+/time-step {
+  % floor-array shape-id wind-id shape-x shape-y
+  5 copy
+  % save floor-array shape-id wind-id shape-x shape-y
+  2 index data exch get wind-dx exch get
+  % save floor-array shape-id wind-id shape-x shape-y wind-dx
+  3 2 roll add
+  % save floor-array shape-id wind-id shape-y updated-shape-x
+  dup 6 1 roll exch
+  % save updated-shape-x floor-array shape-id wind-id updated-shape-x shape-y
+  shape-fits-2
+  % floor-array shape-id wind-id shape-x shape-y updated-shape-x fits?
+  { 3 1 roll exch } if pop
+  % floor-array shape-id wind-id new-shape-x shape-y
+  1 add
+  % floor-array shape-id wind-id new-shape-x new-shape-y
+  5 copy shape-fits-2
+  % floor-array shape-id wind-id new-shape-x new-shape-y fits?
+  { false }
+  { 1 sub true }
+  ifelse
+} bind def
+
+% total-height floor-array shape-id wind-id
+%   -> total-height floor-array shape-id wind-id
+/rock-step {
+  % total-height floor-array shape-id wind-id
+  2 -4
+  % total-height floor-array shape-id wind-id shape-x shape-y
+  { time-step
+    % total-height floor-array shape-id wind-id shape-x shape-y finished?
+    4 3 roll 1 add data length mod 4 1 roll
+    % total-height floor-array shape-id next-wind-id shape-x shape-y finished?
+    { exit } if
+  } loop
+  % total-height floor-array shape-id wind-id shape-x shape-y
+  0 6 1 roll
+  % total-height floor-min floor-array shape-id wind-id shape-x shape-y
+  shapes 4 index get {
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y cell
+    aload pop
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y dx dy
+    2 index exch sub exch 3 index add exch
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y cell-x cell-y
+    6 index 2 index get
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y cell-x cell-y floor-y
+    2 copy gt { exch } if pop
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y cell-x new-floor-y
+    dup 8 index lt
+    { 8 7 roll pop dup 8 1 roll } if
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y cell-x new-floor-y
+    6 index 3 1 roll put
+    % total-height floor-min floor-array shape-id wind-id shape-x shape-y
+  } forall
+  % total-height floor-min floor-array shape-id wind-id shape-x shape-y
+  pop pop
+  % total-height floor-min floor-array shape-id wind-id
+  5 3 roll
+  % floor-array shape-id wind-id total-height floor-min
+  exch 1 index sub
+  % floor-array shape-id wind-id floor-min new-total-height
+  5 1 roll
+  % total-height floor-array shape-id wind-id floor-min
+  0 1 5 index length 1 sub {
+    % total-height floor-array shape-id wind-id floor-min i
+    4 index 1 index get
+    % total-height floor-array shape-id wind-id floor-min i old-y
+    2 index sub
+    % total-height floor-array shape-id wind-id floor-min i new-y
+    5 index 3 1 roll put
+    % total-height floor-array shape-id wind-id floor-min
+  } for
+  % total-height floor-array shape-id wind-id floor-min
+  pop
+  % total-height floor-array shape-id wind-id
+  exch 1 add shapes length mod exch
+  % total-height floor-array next-shape-id wind-id
+} bind def
+
+% floor-array shape-id wind-id -> key
+/state-to-key {
+  % floor-array shape-id wind-id
+  2 index length 3 add string
+  % floor-array shape-id wind-id empty-key
+  0 1 5 index length 1 sub {
+    % floor-array shape-id wind-id key index
+    4 index 1 index get
+    % floor-array shape-id wind-id key index value
+    2 index 3 1 roll put
+    % floor-array shape-id wind-id key
+  } for
+  % floor-array shape-id wind-id key
+  4 3 roll length
+  % shape-id wind-id key shape-index
+  1 index 1 index 5 index put
+  % shape-id wind-id key shape-index
+  1 add
+  % shape-id wind-id key MSB-wind-index
+  1 index 1 index 4 index 256 idiv put
+  % shape-id wind-id key MSD-wind-index
+  1 add
+  % shape-id wind-id key LSD-wind-index
+  1 index 1 index 4 index 256 mod put
+  % shape-id wind-id key LSD-wind-index
+  4 2 roll pop pop pop
+  % key
+} bind def
+
+% key ->
+/dump-key {
+  stderr ([) writestring
+  {
+    % char
+    15 string cvs
+    % (element)
+    dup length 4 exch sub
+    % (element) pad-count
+    { stderr 32 write } repeat
+    stderr exch writestring
+  } forall
+  stderr ( ]) writestring
+} bind def
+
+/state-machine 10000 dict def
+
+%%% 0 0 [ 7 { 0 } repeat ] 0 0
+%%% % stone-count total-height floor-array shape-id wind-id
+%%% 3 copy state-to-key 5 1 roll
+%%% {
+%%%   % prev-stone-count prev-key total-height floor-array shape-id wind-id
+%%%   6 5 roll 1 add 6 1 roll
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id
+%%%   rock-step
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id
+%%%   3 copy state-to-key
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id new-key
+%%%   state-machine 6 index known
+%%%   { % stone-count prev-key total-height floor-array shape-id wind-id new-key
+%%%     stderr (Cycle found from stone ) writestring
+%%%     state-machine 6 index get 1 get
+%%%     stderr exch 15 string cvs writestring
+%%%     stderr ( at height ) writestring
+%%%     state-machine 6 index get 2 get
+%%%     stderr exch 15 string cvs writestring
+%%%     stderr ( to stone ) writestring
+%%%     6 index stderr exch 15 string cvs writestring
+%%%     stderr ( at height ) writestring
+%%%     4 index stderr exch 15 string cvs writestring
+%%%     stderr 10 write
+%%%     exit
+%%%   } if
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id new-key
+%%%   [ 1 index 8 index 7 index ]
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id new-key record
+%%%   6 index exch state-machine 3 1 roll put
+%%%   % stone-count prev-key total-height floor-array shape-id wind-id new-key
+%%%   6 1 roll 5 4 roll pop
+%%%   % stone-count new-key total-height floor-array shape-id wind-id
+%%% } loop
+%%% %%% At the end of the first cycle:
+%%% % stone-count prev-key total-height floor-array shape-id wind-id begin-key
+%%% 4 1 roll pop pop pop
+%%% % stone-count prev-key total-height begin-key
+%%% state-machine 3 index get aload pop
+%%% % stone-count prev-key total-height begin-key next-key begin-count begin-height
+%%% 5 4 roll 1 index sub
+%%% % stone-count prev-key begin-key next-key begin-count begin-height cycle-height
+%%% 7 6 roll 3 index sub
+%%% % prev-key begin-key next-key begin-count begin-height cycle-height cycle-count
+%%% 6 4 roll pop pop
+%%% % prev-key begin-count begin-height cycle-height cycle-count
+%%% 2022
+%%% % prev-key begin-count begin-height cycle-height cycle-count problem-count
+%%% 5 4 roll sub 4 3 roll pop
+%%% % prev-key cycle-height cycle-count problem-count-left
+%%% dup 2 index idiv
+%%% % prev-key cycle-height cycle-count problem-count-left full-cycles-in-problem
+%%% stderr (Found ) writestring
+%%% stderr 1 index 15 string cvs writestring
+%%% stderr ( cycles\012) writestring
+%%% % prev-key cycle-height cycle-count problem-count-left full-cycles-in-problem
+%%% 3 index mul exch
+%%% % prev-key cycle-height cycle-count height-in-full-cycles problem-count-left
+%%% 2 index mod
+%%% % prev-key cycle-height cycle-count height-in-full-cycles count-in-last-cycle
+%%% 4 index exch {
+%%%   % ... cur-key
+%%%   state-machine exch get 0 get
+%%%   % ... next-key
+%%% } repeat
+%%% % prev-key cycle-height cycle-count height-in-full-cycles last-key
+%%% state-machine exch get 2 get
+%%% % prev-key cycle-height cycle-count height-in-full-cycles last-height
+%%% add
+%%% % prev-key cycle-height cycle-count total-height
+%%% stderr (Result: ) writestring
+%%% stderr exch 15 string cvs writestring
+%%% stderr 10 write
+
+% key -> floor-array
+/key-to-column-heights {
+  [ exch { } forall pop pop pop ]
+} bind def
+
+[ 7 { 0 } repeat ] 0 0
+state-to-key
+10 new-arena -1 -1
+% key arena rock-count time
+{
+  % cur-key arena rock-count time
+  simulate-rock
+  % prev-key arena rock-count time
+  2 index column-reverse-heights
+  % prev-key arena rock-count time floor-array
+  2 index shapes length mod
+  % prev-key arena rock-count time floor-array shape-id
+  2 index data length mod
+  % prev-key arena rock-count time floor-array shape-id wind-id
+  state-to-key
+  % prev-key arena rock-count time cur-key
+  state-machine 5 index known { exit } if
+  % prev-key arena rock-count time cur-key
+  [ 1 index 4 index 6 index top-used-line 1 add ]
+  % prev-key arena rock-count time cur-key record
+  state-machine exch 6 index exch put
+  % prev-key arena rock-count time cur-key
+  5 1 roll 4 3 roll pop
+  % cur-key arena rock-count time
+} loop
+%%% We found a cycle here:
+%%%   prolog ---> last-prolog-key,count1,height1
+%%%   last-prolog-key ---> first-cycle-key,count2,height2
+%%%   first-cycle-key ---> second-cycle-key,count3,height3
+%%%   last-cycle-key  ---> first-cycle-key,count4,height4 ---> current-state
+
+% first-cycle-key arena rock-count time second-cycle-key
+pop
+% first-cycle-key arena rock-count time
+state-machine 4 index get aload pop 3 2 roll pop
+% first-cycle-key arena rock-count time count3 height3
+4 index top-used-line 1 add exch sub
+% first-cycle-key arena rock-count time count3 cycle-height
+3 index 2 index sub
+% first-cycle-key arena rock-count time count3 cycle-height cycle-count
+stderr (Cycle height: ) writestring
+stderr 2 index 15 string cvs writestring
+stderr (\012Cycle count: ) writestring
+stderr 1 index 15 string cvs writestring
+stderr (\012Cycle start: ) writestring
+stderr 3 index 15 string cvs writestring
+stderr 10 write
+% first-cycle-key arena rock-count time count3 cycle-height cycle-count
+6 3 roll pop pop pop
+% first-cycle-key count3 cycle-height cycle-count
+1000000000000
+% first-cycle-key count3 cycle-height cycle-count problem-count
+3 index sub
+% first-cycle-key count3 cycle-height cycle-count problem-count-after-prolog
+dup 2 index idiv
+% first-cycle-key count3 cycle-height cycle-count problem-count-after-prolog problem-cycles
+exch 2 index mod
+% first-cycle-key count3 cycle-height cycle-count problem-cycles epilog-count
+state-machine 6 index get exch 1 sub {
+  % prev-state
+  0 get
+  % prev-key
+  state-machine exch get
+  % cur-state
+} repeat
+% first-cycle-key count3 cycle-height cycle-count problem-cycles last-state
+2 get
+% first-cycle-key count3 cycle-height cycle-count problem-cycles epilog-height
+exch 3 index mul add
+% first-cycle-key count3 cycle-height cycle-count problem-height
 15 string cvs show
 
 showpage
