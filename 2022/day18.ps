@@ -1,0 +1,316 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day18.ps <day18.txt | display
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data [
+  {
+    datafile 300 string readline
+    not { pop exit } if
+    % (X,Y,Z)
+    (,) search
+    not { 1.125 pstack quit } if
+    % (Y,Z) (,) (X)
+    cvi exch pop exch
+    % X (Y,Z)
+    (,) search
+    not { 2.125 pstack quit } if
+    % X (Z) (,) (Y)
+    cvi exch pop exch cvi
+    % X Y Z
+    3 array astore
+    % [X Y Z]
+  } loop
+] def
+
+data 0 get aload pop 3 copy
+data {
+  aload pop
+  % prev-min-x prev-min-y prev-min-z prev-max-x prev-max-y prev-max-z x y z
+  9 8 roll 3 index
+  % prev-min-y prev-min-z prev-max-x prev-max-y prev-max-z x y z prev-min-x x
+  2 copy gt { exch } if pop
+  % prev-min-y prev-min-z prev-max-x prev-max-y prev-max-z x y z min-x
+  9 8 roll 3 index
+  % prev-min-z prev-max-x prev-max-y prev-max-z x y z min-x prev-min-y y
+  2 copy gt { exch } if pop
+  % prev-min-z prev-max-x prev-max-y prev-max-z x y z min-x min-y
+  9 8 roll 3 index
+  % prev-max-x prev-max-y prev-max-z x y z min-x min-y prev-min-z z
+  2 copy gt { exch } if pop
+  % prev-max-x prev-max-y prev-max-z x y z min-x min-y min-z
+  9 8 roll 6 index
+  % prev-max-y prev-max-z x y z min-x min-y min-z prev-max-x x
+  2 copy lt { exch } if pop
+  % prev-max-y prev-max-z x y z min-x min-y min-z max-x
+  9 8 roll 6 index
+  % prev-max-z x y z min-x min-y min-z max-x prev-max-y y
+  2 copy lt { exch } if pop
+  % prev-max-z x y z min-x min-y min-z max-x max-y
+  9 8 roll 6 index
+  % x y z min-x min-y min-z max-x max-y prev-max-z z
+  2 copy lt { exch } if pop
+  % x y z min-x min-y min-z max-x max-y max-z
+  9 6 roll pop pop pop
+  % min-x min-y min-z max-x max-y max-z
+} forall
+% min-x min-y min-z max-x max-y max-z
+/max-z exch 1 add def
+/max-y exch 1 add def
+/max-x exch 1 add def
+/min-z exch 1 sub def
+/min-y exch 1 sub def
+/min-x exch 1 sub def
+
+/x-width max-x min-x sub 1 add def
+/y-width max-y min-y sub 1 add def
+/z-width max-z min-z sub 1 add def
+
+% x y z -> index
+/xyz-index {
+  min-z sub
+  y-width mul
+  add min-y sub
+  x-width mul
+  add min-x sub
+} bind def
+
+% index -> x y z
+/split-index {
+  % index
+  dup x-width mod min-x add
+  % index x
+  exch x-width idiv
+  % x yz-part
+  dup y-width mod min-y add
+  % x yz-part y
+  exch y-width idiv
+  % x y z-part
+  min-z add
+  % x y z
+} bind def
+
+% [x y z] -> index
+/arr-index {
+  dup length 3 eq not { 3.125 pstack quit } if
+  aload pop
+  xyz-index
+} bind def
+
+/data-dict <<
+  data { arr-index 1 } forall
+>> def
+
+% x y z -> bool
+/xyz-in-bounds {
+  true
+  % x y z true
+  1 index min-z ge and
+  1 index max-z le and
+  % x y z z-ok?
+  2 index min-y ge and
+  2 index max-y le and
+  % x y z y-and-z-ok?
+  3 index min-x ge and
+  3 index max-x le and
+  % x y z all-ok?
+  4 1 roll pop pop pop
+} bind def
+
+% x y z -> bool
+/xyz-known {
+  % x y z
+  3 copy xyz-in-bounds
+  { xyz-index data-dict exch known }
+  { pop pop pop false }
+  ifelse
+} bind def
+
+% x y z dx dy dz -> x+dx y+dy x+dz
+/xyz-add {
+  % x y z dx dy dz
+  4 3 roll add
+  % x y dx dy z+dz
+  5 1 roll
+  % z+dz x y dx dy
+  3 2 roll add
+  % z+dz x dx y+dy
+  4 1 roll
+  % y+dy z+dz x dx
+  add 3 1 roll
+  % x+dx y+dy z+dz
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+0 data {
+  % acc [x y z]
+  aload pop
+  % acc x y z
+  3 copy  1  0  0 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  3 copy -1  0  0 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  1  0 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0 -1  0 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  0  1 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  0 -1 xyz-add xyz-known not { 4 3 roll 1 add 4 1 roll } if
+  % acc x y z
+  pop pop pop
+  % acc
+} forall
+% side-count
+15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+
+/exterior-dict x-width y-width z-width mul mul dict def
+min-x 1 max-x {
+  min-y 1 max-y {
+    % x y
+    2 copy min-z xyz-index exterior-dict exch 1 put
+    2 copy max-z xyz-index exterior-dict exch 1 put
+    % x y
+    pop
+    % x
+  } for
+  % x
+  pop
+} for
+min-x 1 max-x {
+  min-z 1 max-y {
+    % x y
+    2 copy min-y exch xyz-index exterior-dict exch 1 put
+    2 copy max-y exch xyz-index exterior-dict exch 1 put
+    % x y
+    pop
+    % x
+  } for
+  % x
+  pop
+} for
+min-y 1 max-y {
+  min-z 1 max-z {
+    % y z
+    2 copy min-x 3 1 roll xyz-index exterior-dict exch 1 put
+    2 copy max-x 3 1 roll xyz-index exterior-dict exch 1 put
+    % y z
+    pop
+    % y
+  } for
+  % y
+  pop
+} for
+
+
+/boundary-dict data length dict def
+
+% next-todo x y z -> updated-next-todo
+/update-dicts {
+  % next-todo x y z
+  3 copy xyz-in-bounds
+  { % next-todo x y z
+    xyz-index
+    % next-todo index
+    data-dict 1 index known
+    % next-todo index is-rock?
+    { boundary-dict 1 index 1 put }
+    { exterior-dict 1 index known
+      % next-todo index is-known?
+      not {
+        % next-todo index
+        exterior-dict 1 index 1 put
+        % next-todo index
+        exch 1 index apush exch
+        % updated-next-todo index
+      } if
+      % next-todo index
+    }
+    ifelse
+    % next-todo index
+    pop
+  }
+  { pop pop pop }
+  ifelse
+} bind def
+
+[ exterior-dict { pop } forall ]
+% inital-todo-list
+{
+  % todo-list
+  dup length 0 eq { exit } if
+  % todo-list
+  [] exch
+  % next-todo todo-list
+  {
+    % next-todo cur-key
+    split-index
+    % next-todo x y z
+    4 3 roll
+    % x y z next-todo
+    4 copy pop  1  0  0 xyz-add update-dicts
+    4 copy pop -1  0  0 xyz-add update-dicts
+    4 copy pop  0  1  0 xyz-add update-dicts
+    4 copy pop  0 -1  0 xyz-add update-dicts
+    4 copy pop  0  0  1 xyz-add update-dicts
+    4 copy pop  0  0 -1 xyz-add update-dicts
+    % x y z next-todo
+    4 1 roll pop pop pop
+    % next-todo
+  } forall
+  % next-todo
+} loop
+
+% x y z -> bool
+/xyz-is-ext {
+  xyz-index exterior-dict exch known
+} bind def
+
+0 data {
+  % acc [x y z]
+  aload pop
+  % acc x y z
+  3 copy  1  0  0 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  3 copy -1  0  0 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  1  0 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0 -1  0 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  0  1 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  3 copy  0  0 -1 xyz-add xyz-is-ext { 4 3 roll 1 add 4 1 roll } if
+  % acc x y z
+  pop pop pop
+  % acc
+} forall
+% side-count
+15 string cvs show
+
+
+showpage
+quit
