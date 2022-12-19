@@ -1,0 +1,617 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day19.ps <day19.txt | display
+
+% [ item_1 ... item_n ] item_0 -> [ item_0 item_1 ... item_n ]
+/apush {
+  % array new_item
+  exch aload length 1 add array astore
+} bind def
+
+% [ item_0 ... item_n-1 ] item_n -> [ item_0 item_1 ... item_n ]
+/aappend {
+  % [ item_0 ... item_n-1 ] item_n
+  1 index length
+  % [ item_0 ... item_n-1 ] item_n n
+  dup 1 add array
+  % [ item_0 ... item_n-1 ] item_n n new-array
+  dup 5 4 roll
+  % item_n n new-array new-array [ item_0 ... item_n-1 ]
+  0 exch putinterval
+  % item_n n [ item_0 ... item_n-1 null ]
+  dup 4 2 roll
+  % [ item_0 ... item_n-1 null ] [ item_0 ... item_n-1 null ] item_n n
+  exch put
+  % [ item_0 ... item_n-1 item_n ]
+} bind def
+
+% [ item_0 item_1 ... item_n ] -> [ item_1 ... item_n ] item_0
+/apop {
+  % [ item_0 item_1 ... item_n ]
+  dup 0 get exch
+  % item_0 [ item_0 item_1 ... item_n ]
+  1 1 index length 1 sub
+  % item_0 [ item_0 item_1 ... item_n ] 1 n
+  getinterval
+  % item_0 [ item_1 ... item_n ]
+  exch
+  % [ item_1 ... item_n ] item_0
+} bind def
+
+% [item1a item2a ... itemma] [item1b item2b ... itemmnb]
+%  -> [[item1a item1b] [item2a item2b] ... [item(min(m,n))a item(min(m,n))b]]
+/azip {
+  % [item1a item2a ... itemma] [item1b item2b ... itemnb]
+  0 1 3 index length 3 index length
+  % [item1a item2a ... itemma] [item1b item2b ... itemnb] 0 1 n m
+  2 copy gt { exch } if pop
+  % [item1a item2a ... itemma] [item1b item2b ... itemnb] 0 1 min(m,n)
+  [ 6 1 roll
+    % mark [item1a item2a ... itemma] [item1b item2b ... itemnb] 0 1 min(m,n)
+    1 sub {
+      % mark prev-items array1 array2 index
+      2 index 1 index get
+      % mark prev-items array1 array2 index val1
+      exch 2 index exch get
+      % mark prev-items array1 array2 val1 val2
+      2 array astore
+      % mark prev-items array1 array2 cur-item
+      3 1 roll
+      % mark prev-items cur-item array1 array2
+    } for
+    % mark items [item1a item2a ... itemma] [item1b item2b ... itemnb]
+    pop pop
+  ]
+} bind def
+
+% [item1a item2a ... itemma] [item1b item2b ... itemmnb]
+%  -> [item1a+item1b item2a+item2b ... item(min(m,n))a+item(min(m,n))b]
+/vec-add {
+  [ 3 1 roll azip { aload pop add } forall ]
+} bind def
+
+% [item1a item2a ... itemma] [item1b item2b ... itemmnb]
+%  -> [item1a-item1b item2a-item2b ... item(min(m,n))a-item(min(m,n))b]
+/vec-sub {
+  [ 3 1 roll azip { aload pop sub } forall ]
+} bind def
+
+% [item1a item2a ... itemma] [item1b item2b ... itemmnb]
+%  -> item1a>=item1b & item2a>=item2b & ... & item(min(m,n))a>=item(min(m,n))b
+/vec-all-ge {
+  true 3 1 roll
+  azip { aload pop ge and } forall
+} bind def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data [
+  {
+    datafile 300 string readline
+    not { pop exit } if
+    % line
+    counttomark exch
+    % expected-rank line
+    (Blueprint ) anchorsearch
+    not { 1.125 pstack quit } if
+    pop
+    % expected-rank suffix
+    (: Each ore robot costs ) search
+    not { 2.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank suffix
+    ( ore. Each clay robot costs ) search
+    not { 3.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 suffix
+    ( ore. Each obsidian robot costs ) search
+    not { 4.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 cost1 suffix
+    ( ore and ) search
+    not { 5.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 cost1 cost2a suffix
+    ( clay. Each geode robot costs ) search
+    not { 6.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 cost1 cost2a cost2b suffix
+    ( ore and ) search
+    not { 7.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 cost1 cost2a cost2b cost3a suffix
+    ( obsidian.) search
+    not { 8.125 pstack quit } if
+    exch pop cvi exch
+    % expected-rank rank cost0 cost1 cost2a cost2b cost3a cost3b suffix
+    dup length 0 eq not { 9.125 pstack quit } if pop
+    % expected-rank rank cost0 cost1 cost2a cost2b cost3a cost3b
+    8 6 roll 2 copy eq not { 10.125 pstack quit } if pop pop
+    % cost0 cost1 cost2a cost2b cost3a cost3b
+    0 exch 0 4 array astore
+    % cost0 cost1 cost2a cost2b cost3-array
+    5 1 roll 0 0 4 array astore
+    % cost3-array cost0 cost1 cost2-array
+    4 1 roll 0 0 0 4 array astore
+    % cost2-array cost3-array cost0 cost1-array
+    4 1 roll 0 0 0 4 array astore
+    % cost1-array cost2-array cost3-array cost0-array
+    4 1 roll 4 array astore
+    % cost-array
+  } loop
+] def
+
+/max-cost [
+  0 0 0 0 data {
+    {
+      % prev-max-cost0 prev-max-cost1 prev-max-cost2 prev-max-cost3 cur-cost
+      dup 0 get
+      % prev-max-cost0 prev-max-cost1 prev-max-cost2 prev-max-cost3 cur-cost cost0
+      6 5 roll
+      % prev-max-cost1 prev-max-cost2 prev-max-cost3 cur-cost cost0 prev-max-cost0
+      2 copy lt { exch } if pop
+      % prev-max-cost0 prev-max-cost1 prev-max-cost2 cur-cost max-cost0
+      1 index 1 get
+      % prev-max-cost1 prev-max-cost2 prev-max-cost3 cur-cost max-cost0 cost1
+      6 5 roll 2 copy lt { exch } if pop
+      % prev-max-cost2 prev-max-cost3 cur-cost max-cost0 max-cost1
+      2 index 2 get
+      % prev-max-cost2 prev-max-cost3 cur-cost max-cost0 max-cost1 cost2
+      6 5 roll 2 copy lt { exch } if pop
+      % prev-max-cost3 cur-cost max-cost0 max-cost1 max-cost2
+      3 index 3 get
+      % prev-max-cost3 cur-cost max-cost0 max-cost1 max-cost2 cost3
+      6 5 roll 2 copy lt { exch } if pop
+      % cur-cost max-cost0 max-cost1 max-cost2 max-cost3
+      5 4 roll pop
+      % max-cost0 max-cost1 max-cost2 max-cost3
+    } forall
+  } forall
+] def
+
+max-cost ==
+
+% blueprint resources flows build -> blueprint next-resources next-flows
+/simulate-minute {
+  % blueprint resources flows build
+  dup 0 ge
+  % blueprint resources flows build has-build?
+  { % blueprint resources flows build
+    3 index 1 index get
+    % blueprint resources flows build costs
+    4 3 roll exch vec-sub
+    % blueprint flows build updated-resources
+  }
+  { 3 2 roll }
+  ifelse
+  % blueprint flows build resources
+  2 index vec-add
+  % blueprint flows build next-resources
+  3 1 roll
+  % blueprint next-resources flows build
+  dup 0 ge
+  % blueprint next-resources flows build has-build?
+  { % blueprint next-resources flows build
+    2 copy get 1 add
+    % blueprint next-resources flows build next-flow
+    2 index 3 1 roll put
+    % blueprint next-resources next-flows
+  }
+  { pop }
+  ifelse
+  % blueprint next-resources next-flows
+} bind def
+
+% blueprint build-list max-time -> score true
+%                               -> false
+/simulate-build-list {
+  % blueprint build-list max-time
+  0 [0 0 0 0] [1 0 0 0] 4 3 roll
+  % blueprint build-list build-index resources flows max-time
+  6 5 roll 4 1 roll
+  % build-list build-index blueprint resources flows max-time
+  { % build-list build-index blueprint resources flows
+    4 index length 4 index gt
+    % build-list build-index blueprint resources flows has-build?
+    { % build-list build-index blueprint resources flows
+      4 index 4 index get
+      % build-list build-index blueprint resources flows build
+      3 index 1 index get
+      % build-list build-index blueprint resources flows build costs
+      3 index exch vec-all-ge
+      % build-list build-index blueprint resources flows build can-build?
+      { 5 4 roll 1 add 5 1 roll }
+      { pop -1 }
+      ifelse
+      % build-list build-index blueprint resources flows build
+    }
+    { -1 }
+    ifelse
+    % build-list build-index blueprint resources flows build
+    simulate-minute
+    % build-list build-index blueprint resources flows
+  } repeat
+  % build-list build-index blueprint resources flows
+  4 index length 4 index le
+  % build-list build-index blueprint resources flows build-list-finished?
+  { pop 3 get 4 1 roll pop pop pop true }
+  { pop pop pop pop pop false }
+  ifelse
+} bind def
+
+% build-list -> next-build-list
+/next-build-list {
+  % build-list
+  dup length 2 sub
+  % build-list index
+  {
+    % build-list index
+    dup 0 lt { pop 0 apush exit } if
+    % build-list index
+    2 copy get
+    % build-list index item
+    1 add 4 mod
+    % build-list index next-item
+    3 copy put
+    % next-build-list index next-item
+    0 eq
+    { 1 sub }
+    { pop exit }
+    ifelse
+  } loop
+  % next-build-list
+} bind def
+
+% build-list -> build-list
+/next-valid-build-list {
+  {
+    % prev-build-list
+    next-build-list
+    % build-list
+    [ 0 0 0 0 ] 1 index {
+      % build-list count-list cur-item
+      2 copy get
+      % build-list count-list cur-item prev-count
+      1 add
+      % build-list count-list cur-item count
+      2 index 3 1 roll put
+      % build-list updated-count-list
+    } forall
+    % build-list count-list
+    dup 3 0 put
+    % build-list fixed-count-list
+    max-cost exch vec-all-ge
+    % build-list is-valid?
+    { exit } if
+    % build-list
+  } loop
+  % valid-build-list
+} bind def
+
+% array -> copied-array
+/copy-array {
+  aload length array astore
+} bind def
+
+% blueprint prev-state build -> next-state
+/update-state {
+  % blueprint prev-state build
+  exch aload pop
+  % blueprint build prev-resources prev-flows prev-build-list
+  3 index 0 ge
+  { 3 index aappend } if
+  % blueprint build prev-resources prev-flows build-list
+  5 1 roll
+  % build-list blueprint build prev-resources prev-flows
+  exch copy-array exch copy-array
+  % build-list blueprint build prev-resources-copy prev-flows-copy
+  3 2 roll
+  % build-list blueprint prev-resources-copy prev-flows-copy build
+  simulate-minute
+  % build-list blueprint resources flows
+  3 2 roll pop
+  % build-list resources flows
+  3 2 roll
+  % resources flows build-list
+  3 array astore
+  % next-state
+} bind def
+
+% int-list -> key
+/list-to-key {
+  % int-list
+  dup length string
+  % int-list empty-key
+  0 1 2 index length 1 sub {
+    % int-list key index
+    2 index 1 index get
+    % int-list key index value
+    2 index 3 1 roll put
+    % int-list updated-key
+  } for
+  % int-list final-key
+  exch pop
+  % final-key
+} bind def
+
+% active-dict blueprint prev-state build
+%  -> active-dict blueprint prev-state build is-valid?
+/update-valid? {
+  % active-dict blueprint prev-state build
+  dup 0 ge
+  { % active-dict blueprint prev-state build
+    1 index 2 get
+    % active-dict blueprint prev-state build prev-build-list
+    1 index aappend
+    % active-dict blueprint prev-state build next-build-list
+    list-to-key
+    % active-dict blueprint prev-state build next-key
+    4 index 1 index known
+    % active-dict blueprint prev-state build next-key already-active?
+    { pop false }
+    { % active-dict blueprint prev-state build next-key
+      2 index 0 get
+      % active-dict blueprint prev-state build next-key resources
+      4 index 3 index get
+      % active-dict blueprint prev-state build next-key resources cost
+      vec-all-ge
+      % active-dict blueprint prev-state build next-key is-possible?
+      3 index 1 get
+      % active-dict blueprint prev-state build next-key is-possible? rates
+      3 index get
+      % active-dict blueprint prev-state build next-key is-possible? rate
+      max-cost 4 index get lt
+      % active-dict blueprint prev-state build next-key is-possible? rate-ok?
+      3 index 3 eq or and
+      % active-dict blueprint prev-state build next-key is-valid?
+      { % active-dict blueprint prev-state build next-key
+        4 index exch 1 put
+        % active-dict blueprint prev-state build
+        true
+      }
+      { pop false }
+      ifelse
+      % active-dict blueprint prev-state build is-valid?
+    }
+    ifelse
+  }
+  { true }
+  ifelse
+} bind def
+
+% blueprint max-time -> score
+/eval-blueprint {
+  % blueprint max-time
+  0 1000 dict [[[0 0 0 0] [1 0 0 0] []]] 4 3 roll
+  % blueprint init-time init-active-dict init-state-list max-time
+  {
+    % blueprint prev-time active-dict state-list
+    3 2 roll 1 add 3 1 roll
+    % blueprint time active-dict state-list
+    [ exch
+      % blueprint time active-dict mark state-list
+      2 index 5 index 3 2 roll
+      % blueprint time active-dict mark active-dict blueprint state-list
+      {
+%%%    Exchaustive search of build-list-space
+%%%     % ... active-dict blueprint prev-state
+%%%     -1 1 3 {
+%%%       % ... active-dict blueprint prev-state build
+%%%       update-valid?
+%%%       { % ... active-dict blueprint prev-state build
+%%%         3 copy update-state
+%%%         % ... active-dict blueprint prev-state build next-state
+%%%         5 1 roll pop
+%%%         % ... next-state active-dict blueprint prev-state
+%%%       }
+%%%       { pop }
+%%%       ifelse
+%%%     } for
+%%%     % ... active-dict blueprint prev-state
+%%%     pop
+%%%     % ... active-dict blueprint
+%%%    Greedy search of build-list-space, prioritizing geode over obsidian over
+%%%    everything else. This is a bit of a hack, it doesn't work with the
+%%%    reference input (first blueprint needs to build an obsidian bot when
+%%%    both obsidian and geode are possible), but it works on my input,
+%%%    so let's say it's good enough.
+        % ... active-dict blueprint prev-state
+        3 update-valid?
+        { %%% drop everything to build a geode bot
+          % ... active-dict blueprint prev-state build
+          2 index 3 1 roll
+          % ... active-dict blueprint blueprint prev-state build
+          update-state
+          % ... active-dict blueprint next-state
+          3 1 roll
+          % ... next-state active-dict blueprint
+        }
+        { pop 2 update-valid?
+          { %%% drop everything to build an obsidian bot
+            % ... active-dict blueprint prev-state build
+            2 index 3 1 roll
+            % ... active-dict blueprint blueprint prev-state build
+            update-state
+            % ... active-dict blueprint next-state
+            3 1 roll
+            % ... next-state active-dict blueprint
+          }
+          { pop
+            % ... active-dict blueprint prev-state
+            -1 1 1 {
+              % ... active-dict blueprint prev-state build
+              update-valid?
+              { % ... active-dict blueprint prev-state build
+                3 copy update-state
+                % ... active-dict blueprint prev-state build next-state
+                5 1 roll pop
+                % ... next-state active-dict blueprint prev-state
+              }
+              { pop }
+              ifelse
+            } for
+            % ... active-dict blueprint prev-state
+            pop
+            % ... active-dict blueprint
+          }
+          ifelse
+        }
+        ifelse
+        % ... active-dict blueprint
+      } forall
+      % blueprint time mark new-states active-dict blueprint
+      pop pop
+    ]
+    % blueprint time active-dict new-state-list
+  } repeat
+  % blueprint time active-dict final-state-list
+  exch pop
+  % blueprint time final-state-list
+  stderr (Final list with ) writestring
+  stderr 1 index length 15 string cvs writestring
+  stderr ( states\012) writestring
+  % blueprint time final-state-list
+  exch pop 0 exch {
+    % blueprint best-so-far state
+    0 get
+    % blueprint best-so-far resources
+    3 get
+    % blueprint best-so-far score
+    2 copy lt { exch } if pop
+    % blueprint new-best-so-far
+  } forall
+  % blueprint best-score
+  exch pop
+  % best-score
+  stderr (Score ) writestring
+  stderr 1 index 15 string cvs writestring
+  stderr 10 write
+} bind def
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+0 0 data {
+  % accumulator prev-rank cur-blueprint
+  exch 1 add exch
+  % accumulator rank cur-blueprint
+  stderr (Running blueprint ) writestring
+  stderr 2 index 15 string cvs writestring
+  stderr ( / ) writestring
+  stderr data length 15 string cvs writestring
+  stderr 10 write
+  stderr flushfile
+  % accumulator rank cur-blueprint
+  24 eval-blueprint
+  % accumulator rank score
+  1 index mul
+  % accumulator rank contribution
+  3 2 roll add exch
+  % updated-accumulator rank
+} forall
+% final-accumulator last-rank
+pop 15 string cvs show
+
+%%% [ data length { 0 } repeat ] [3]
+%%% {
+%%%   % best-score-array prev-build-list
+%%%   next-valid-build-list false
+%%%   % best-score-array build-list updated?
+%%%   0 1 data length 1 sub {
+%%%     % best-score-array build-list updated? index
+%%%     data 1 index get
+%%%     % best-score-array build-list updated? index blueprint
+%%%     3 index
+%%%     % best-score-array build-list updated? index blueprint build-list
+%%%     24 simulate-build-list
+%%%     { % best-score-array build-list updated? index score
+%%%       dup 5 index 3 index get gt
+%%%       % best-score-array build-list updated? index score score>prev-max?
+%%%       { 4 index 2 index 2 index put
+%%%         % updated-best-score-array build-list updated? index score
+%%%         pop pop pop true
+%%%         % updated-best-score-array build-list updated?
+%%%       }
+%%%       { pop pop }
+%%%       ifelse
+%%%       % updated-best-score-array build-list updated?
+%%%     }
+%%%     { pop }
+%%%     ifelse
+%%%     % best-score-array build-list updated?
+%%%   } for
+%%%   % best-score-array build-list updated?
+%%%   {
+%%%     % best-score-array build-list
+%%%     stderr (\015Score ) writestring
+%%%     0 0 3 index {
+%%%       % ... accumulator prev-rank score
+%%%       exch 1 add exch
+%%%       % ... accumulator rank score
+%%%       1 index mul
+%%%       % ... accumulator rank contribution
+%%%       3 2 roll add exch
+%%%       % ... accumulator rank
+%%%     } forall
+%%%     % best-score-array build-list accumulator rank
+%%%     1 index 33 eq { quit } if
+%%%     % best-score-array build-list accumulator rank
+%%%     pop 15 string cvs
+%%%     stderr exch writestring
+%%%     stderr ( at length ) writestring
+%%%     stderr 1 index length 15 string cvs writestring
+%%%     stderr flushfile
+%%%     % best-score-array build-list
+%%%   } if
+%%%   % best-score-array build-list
+%%% } loop
+
+(Second Puzzle: )
+72 664 moveto show
+
+1 0 data {
+  % accumulator prev-rank cur-blueprint
+  exch 1 add exch
+  % accumulator rank cur-blueprint
+  1 index 4 ge { pop exit } if
+  % accumulator rank cur-blueprint
+  stderr (Running blueprint ) writestring
+  stderr 2 index 15 string cvs writestring
+  stderr ( / ) writestring
+  stderr data length 15 string cvs writestring
+  stderr 10 write
+  stderr flushfile
+  % accumulator rank cur-blueprint
+  32 eval-blueprint
+  % accumulator rank score
+  3 2 roll mul exch
+  % updated-accumulator rank
+} forall
+% final-accumulator last-rank
+stderr (Result 2: ) writestring
+stderr 2 index 15 string cvs writestring
+stderr 10 write
+pop 15 string cvs show
+
+
+showpage
+quit
