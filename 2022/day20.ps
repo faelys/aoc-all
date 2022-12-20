@@ -1,0 +1,183 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day20.ps <day20.txt | display
+
+% array value -> index
+/find-in-array {
+  % array value
+  -1.125 0 1 4 index length 1 sub {
+    % array value result cur-index
+    3 index 1 index get
+    % array value result cur-index cur-value
+    3 index eq
+    { % array value result cur-index
+      exch pop exit } if
+    % array value result cur-index
+    pop
+    % array value result
+  } for
+  % array value result
+  3 1 roll pop pop
+  % result
+} bind def
+
+% array orig-index distance ->
+/move-in-array {
+  % array orig-index unbounded-distance
+  2 index length
+  % array orig-index unbounded-distance length
+  exch 1 index 1 sub mod
+  % array orig-index length distance
+  dup 0 eq
+  { pop pop pop pop }
+  {
+    % array orig-index length distance
+    3 index 3 index get
+    % array orig-index length distance pivot
+    3 index 1 add 3 index lt
+    % array orig-index length distance pivot orig-not-last?
+    {
+      % array orig-index length distance pivot
+      4 index 4 index 1 add 4 index 1 index sub getinterval
+      % array orig-index length distance pivot slice-after-pivot
+      5 index exch 5 index exch putinterval
+    } if
+    % array-without-pivot orig-index length distance pivot
+    exch 4 3 roll add
+    % array-without-pivot length pivot extended-dest-index
+    dup 0 lt { 2 index 1 sub add } if
+    dup 3 index ge { 2 index sub 1 add } if
+    % array-without-pivot length pivot dest-index
+    dup 1 add 3 index lt
+    % array-without-pivot length pivot dest-index dest-not-last?
+    {
+      % array-without-pivot length pivot dest-index
+      3 index 1 index 4 index 1 index sub 1 sub getinterval
+      % array-without-pivot length pivot dest-index slice-after-dest
+      4 index exch 2 index 1 add exch putinterval
+      % array-with-room-for-dest length pivot dest-index
+    } if
+    % array-with-room-for-dest length pivot dest-index
+    exch 3 index 3 1 roll put
+    % final-array length
+    pop pop
+    %
+  }
+  ifelse
+} bind def
+
+% index-array factor -> updated-index-array
+/mix {
+  % init-index-array factor
+  exch
+  % factor init-index-array
+  0 1 data length 1 sub {
+    % factor prev-index-array cur-index
+    data 1 index get
+    % factor prev-index-array cur-index data-entry
+    3 index mul exch
+    % factor prev-index-array distance cur-index
+    2 index exch find-in-array
+    % factor prev-index-array distance index-in-index
+    exch 2 index 3 1 roll
+    % factor prev-index-array prev-index-array index-in-index distance
+    move-in-array
+    % factor index-array
+  } for
+} bind def
+
+% index-array -> result
+/compute-result {
+  % index-array
+  data 0 find-in-array
+  % index-array index-of-0
+  1 index exch find-in-array
+  % index-array index-of-index-of-0
+  1000 add 1 index length mod
+  % index-array index-of-1000th
+  2 copy get
+  % index-array index-of-1000th 1000th
+  data exch get
+  % index-array index-of-1000th value-of-1000th
+  exch 1000 add 2 index length mod
+  % index-array value-of-1000th index-of-2000th
+  2 index 1 index get data exch get exch
+  % index-array value-of-1000th value-of-2000th index-of-2000th
+  1000 add 3 index length mod
+  % index-array value-of-1000th value-of-2000th index-of-3000th
+  3 index exch get data exch get
+  % index-array value-of-1000th value-of-2000th value-of-3000th
+  add add
+  % index-array result
+  exch pop
+} bind def
+
+% value-array index-array -> array
+/dereference-array {
+  [ 3 1 roll
+    % mark value-array index-array
+    {
+      % mark prev-items value-array cur-index
+      1 index exch get
+      % mark prev-items value-array cur-item
+      exch
+      % mark prev-items cur-item value-array
+    } forall
+    % mark items value-array
+    pop
+  ]
+} bind def
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data [
+  {
+    datafile 300 string readline
+    not { pop exit } if
+    cvi
+  } loop
+] def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+[ 0 1 data length 1 sub { } for ]
+% init-indices
+1 mix
+% final-index-array
+compute-result 15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+
+[ 0 1 data length 1 sub { } for ]
+% init-indices
+10 { 811589153 mix } repeat
+% final-index-array
+compute-result 811589153 mul
+15 string cvs show
+
+
+showpage
+quit
