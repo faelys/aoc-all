@@ -1,0 +1,201 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day21.ps <day21.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data <<
+  {
+    datafile 200 string readline
+    not { pop exit } if
+    % (monkey: job)
+    (: ) search
+    not { 1.125 pstack quit } if
+    exch pop exch
+    % (monkey) (job)
+    { %%% 1-iteration loop to use `exit` as a short circuit
+      % (monkey) (job)
+      ( + ) search
+      { exch pop exch
+        % (monkey) (left) (right)
+        /add load 3 array astore
+        % (monkey) job
+        exit
+      } if
+      ( - ) search
+      { exch pop exch
+        % (monkey) (left) (right)
+        /sub load 3 array astore
+        % (monkey) job
+        exit
+      } if
+      ( * ) search
+      { exch pop exch
+        % (monkey) (left) (right)
+        /mul load 3 array astore
+        % (monkey) job
+        exit
+      } if
+      ( / ) search
+      { exch pop exch
+        % (monkey) (left) (right)
+        /idiv load 3 array astore
+        % (monkey) job
+        exit
+      } if
+      cvi
+      exit
+    } loop
+    % (monkey) job
+  } loop
+>> def
+
+% name -> value
+/eval-monkey {
+  % name
+  data exch get
+  % job
+  dup type /arraytype eq
+  { aload pop
+    % (left) (right) op
+    3 1 roll eval-monkey
+    % (right) op left-value
+    3 1 roll eval-monkey
+    % op left-value right-value
+    3 1 roll exec
+    % result
+  } if
+  % result
+} bind def
+
+% target-name node-name -> bool
+/has-target {
+  % target-name node-name
+  2 copy eq
+  { pop pop true }
+  { % target-name node-name
+    data exch get
+    % target-name job
+    dup type /arraytype eq
+    { aload pop pop
+      % target-name left-name right-name
+      2 index exch has-target
+      % target-name left-name right-has-target
+      3 1 roll has-target or
+      % result
+    }
+    { pop pop false}
+    ifelse
+    % result
+  }
+  ifelse
+  % result
+} bind def
+
+% dictionary of procedures: result left -> right
+/build-right <<
+  /add  load   /sub load
+  /sub  load   { exch sub }
+  /idiv load   { exch idiv }
+  /mul  load   /idiv load
+>> def
+
+% dictionary of procedures: result right -> left
+/build-left <<
+  /add  load   /sub load
+  /sub  load   /add load
+  /idiv load   /mul load
+  /mul  load   /idiv load
+>> def
+
+% target-name node-name result -> target-value
+/back-propagate {
+  % target-name node-name result
+  exch data exch get
+  % target-name result job
+  dup type /arraytype eq
+  { aload pop
+    % target-name result left-name right-name op
+    4 index 3 index has-target
+    % target-name result left-name right-name op left-has-target
+    5 index 3 index has-target
+    % target-name result left-name right-name op left-has-target right-has-target
+    1 index eq { 2.125 pstack quit } if
+    % target-name result left-name right-name op left-has-target
+    { % target-name result left-name right-name op
+      exch eval-monkey
+      % target-name result left-name op right-value
+      4 3 roll 3 1 roll exch
+      % target-name left-name result right-value op
+      build-left exch get exec
+      % target-name left-name left-value
+      back-propagate
+      % target-value
+    }
+    { % target-name result left-name right-name op
+      3 2 roll eval-monkey
+      % target-name result right-name op left-value
+      4 3 roll 3 1 roll exch
+      % target-name right-name result left-value op
+      build-right exch get exec
+      % target-name right-name right-value
+      back-propagate
+      % target-value
+    }
+    ifelse
+    % target-value
+  }
+  { % target-name result job
+    pop exch pop
+  }
+  ifelse
+  % target-value
+} bind def
+
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+(root) eval-monkey 15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+
+(humn) data (root) get aload pop pop
+% target-name left-name right-name
+2 index 2 index has-target
+% target-name left-name right-name left-has-target
+3 index 2 index has-target
+% target-name left-name right-name left-has-target right-has-target
+1 index eq { 3.125 pstack quit } if
+% target-name left-name right-name left-has-target
+{ exch } if
+% target-name ref-side-name target-side-name
+exch eval-monkey
+% target-name node-name node-value
+back-propagate
+% target-value
+15 string cvs show
+
+showpage
+quit
