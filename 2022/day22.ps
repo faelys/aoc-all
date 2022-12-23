@@ -1,0 +1,414 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day22.ps <day22.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/raw-map [
+  {
+    datafile 200 string readline
+    not { 1.125 pstack quit } if
+    % line
+    dup length 0 eq { exit } if
+  } loop
+] def
+
+/raw-path datafile 6000 string readline not { 2.125 pstack quit } if def
+
+/turn-left-mark -1 def
+/turn-right-mark -2 def
+
+/path [
+  0 raw-path {
+    % length-acc char
+    dup dup 48 ge exch 57 le and
+    { % length-acc digit-char
+      48 sub
+      % length-acc digit
+      exch 10 mul add
+      % next-length-acc
+      -10
+    } if
+    % length-acc char
+    dup 76 eq
+    { % length-acc 'L'
+      pop turn-left-mark 0
+      % length turn next-lenght-acc
+      -10
+    } if
+    % length-acc char
+    dup 82 eq
+    { % length-acc 'R'
+      pop turn-right-mark 0
+      % length turn next-lenght-acc
+      -10
+    } if
+    % length-acc char
+    0 ge { 3.125 pstack quit } if
+    % length-acc
+  } forall
+  % length-acc
+  dup 0 eq { pop } if
+] def
+
+% x y -> char
+/getxy {
+  { %%% 1-iteration loop to use `exit` as a short circuit
+    % x y
+    2 copy 0 lt exch 0 lt or { pop pop 32 exit } if
+    % x y
+    dup raw-map length ge { pop pop 32 exit } if
+    % x y
+    raw-map exch get
+    % x line
+    2 copy length ge { pop pop 32 exit } if
+    % x line
+    exch get
+    exit
+  } loop
+} bind def
+
+/dir-vect <<
+  0 [ 1  0]
+  1 [ 0  1]
+  2 [-1  0]
+  3 [ 0 -1]
+>> def
+
+/origxy-proc <<
+  0 { exch pop 0 exch }
+  1 { pop 0 }
+  2 { exch pop raw-map 1 index get length 1 sub exch }
+  3 { pop raw-map length 1 sub }
+>> def
+
+% x y dir -> x y
+/origxy {
+  % x y dir
+  dup 4 1 roll
+  % dir x y dir
+  origxy-proc exch get exec
+  % dir start-x start-y
+  3 2 roll dir-vect exch get aload pop 4 2 roll
+  % dx dy start-x start-y
+  {
+    % dx dy cur-x cur-y
+    2 copy getxy
+    % dx dy cur-x cur-y cur-char
+    32 eq not { exit } if
+    % dx dy cur-x cur-y
+    exch 3 index add exch 2 index add
+    % dx dy next-x next-y
+  } loop
+  % dx dy x y
+  4 2 roll pop pop
+  % x y
+} bind def
+
+% prev-x prev-y dir -> x y dir
+/one-step-1 {
+  % prev-x prev-y dir
+  dir-vect 1 index get aload pop
+  % prev-x prev-y dir dx dy
+  exch 4 index add exch 3 index add
+  % prev-x prev-y dir new-x new-y
+  2 copy getxy
+  % prev-x prev-y dir new-x new-y new-char
+  dup 32 eq
+  { % prev-x prev-y dir invalid-new-x invalid-new-y new-char
+    pop 2 index
+    % prev-x prev-y dir invalid-new-x invalid-new-y dir
+    origxy
+    % prev-x prev-y dir new-x new-y
+    2 copy getxy
+    % prev-x prev-y dir new-x new-y new-char
+    dup 32 eq { 4.125 pstack quit } if
+    % prev-x prev-y dir new-x new-y new-char
+  } if
+  % prev-x prev-y dir new-x new-y new-char
+  dup 46 eq
+  { % prev-x prev-y dir new-x new-y '.'
+    pop 5 3 roll pop pop 3 2 roll
+    % new-x new-y dir
+  }
+  { % prev-x prev-y dir new-x new-y new-char
+    dup 35 eq
+    { % prev-x prev-y dir new-x new-y '#'
+      pop pop pop
+      % prev-x prev-y dir
+    }
+    { 5.125 pstack quit }
+    ifelse
+    % x y dir
+  }
+  ifelse
+  % x y dir
+} bind def
+
+/cube-size raw-map length 3 idiv def
+
+% invalid-x invalid-y old-dir -> x y dir
+%%% edges:   A  1 B          y   directions:    3
+%%%           ...#           0                2 . 0
+%%%        -7 .#.. 2                            1
+%%%           #...
+%%%  B -1A  7C....D
+%%%   ...#.......#           4
+%%%-4 ........#... 3
+%%%   ..#....#....
+%%%   ..........#.F-3 D
+%%%  H -6G-5 E...#....       8
+%%%         5 .....#.. -2
+%%%           .#......
+%%%           ......#.
+%%%          G  6 H4  B     12
+%%% x 0   4   8   12  16     ^
+%%%
+%%% warp items:
+%%%  - trigger-min-x
+%%%  - trigger-min-y
+%%%  - trigger-max-x
+%%%  - trigger-max-y
+%%%  - trigger-direction
+%%%  - image-of-min-x
+%%%  - image-of-min-y
+%%%  - image-dx
+%%%  - image-dy
+%%%  - image-direction
+
+/warp-data [
+%  tx-ty-tx+ty+td   x  y dx dy d
+  [ 8  0 11  0  3   3  4 -1  0 1] % edge 1
+  [11  0 11  3  0  15 11  0 -1 2] % edge 2
+  [11  4 11  7  0  15  8 -1  0 1] % edge 3
+  [12 11 15 11  1   0  7  0 -1 0] % edge 4
+  [ 8  8  8 11  2   7  7 -1  0 3] % edge 5
+  [ 8 11 11 11  1   3  7 -1  0 3] % edge 6
+  [ 4  4  7  4  3   8  0  0  1 0] % edge 7
+  [ 0  4  3  4  3  11  0 -1  0 1] % edge -1
+  [15  8 15 11  0  11  3  0 -1 2] % edge -2
+  [12  8 15  8  3  11  7  0 -1 2] % edge -3
+  [ 0  4  0  7  2  15 11 -1  0 3] % edge -4
+  [ 4  7  7  7  1   8 11  0 -1 0] % edge -5
+  [ 0  7  3  7  1  11 11 -1  0 3] % edge -6
+  [ 8  0  8  3  2   4  4  1  0 1] % edge -7
+] def
+
+%%% my data:
+%%%             1     2
+%%%           B B B A A A
+%%%        -6 B B B A A A 3
+%%%           B B B A A A
+%%%           C C C   4
+%%%        -7 C C C -4
+%%%       7   C C C
+%%%     E E E D D D
+%%%   6 E E E D D D -3
+%%%     E E E D D D
+%%%     F F F   5
+%%%  -1 F F F-5
+%%%     F F F
+%%%      -2
+
+/my-warp-data [
+%   tx- ty- tx+ ty+d     x   y dx dy d
+  [ 50   0  99   0 3     0 150  0  1 0] % edge 1
+  [100   0 149   0 3     0 199  1  0 3] % edge 2
+  [149   0 149  49 0    99 149  0 -1 2] % edge 3
+  [100  49 149  49 1    99  50  0  1 2] % edge 4
+  [ 99  50  99  99 0   100  49  1  0 3] % edge -4
+  [ 99 100  99 149 0   149  49  0 -1 2] % edge -3
+  [ 50 149  99 149 1    49 150  0  1 2] % edge 5
+  [ 49 150  49 199 0    50 149  1  0 3] % edge -5
+  [  0 199  49 199 1   100   0  1  0 1] % edge -2
+  [  0 150   0 199 2    50   0  1  0 1] % edge -1
+  [  0 100   0 149 2    50  49  0 -1 0] % edge 6
+  [  0 100  49 100 3    50  50  0  1 0] % edge 7
+  [ 50  50  50  99 2     0 100  1  0 1] % edge -7
+  [ 50   0  50  49 2     0 149  0 -1 0] % edge -6
+] def
+
+% prev-x prev-y prev-dir -> x y dir
+/warpxy {
+  false
+  % prev-x prev-y prev-dir found?
+  warp-data {
+    true
+    % prev-x prev-y prev-dir prev-found? warpdata match?
+    5 index 2 index 0 get ge and % prev-x ≥ tx-
+    4 index 2 index 1 get ge and % prev-x ≤ tx+
+    5 index 2 index 2 get le and % prev-y ≥ ty-
+    4 index 2 index 3 get le and % prev-y ≤ ty+
+    3 index 2 index 4 get eq and % prev-dir = td
+    % prev-x prev-y prev-dir prev-found? warpdata match?
+    { % prev-x prev-y prev-dir prev-found? warpdata
+      exch pop true exch
+      % prev-x prev-y prev-dir found? warpdata
+      3 2 roll pop
+      % prev-x prev-y found? warpdata
+      4 3 roll
+      % prev-y found? warpdata prev-x
+      1 index 0 get sub
+      % prev-y found? warpdata delta-x
+      4 3 roll 2 index 1 get sub
+      % found? warpdata delta-x delta-y
+      add
+      % found? warpdata delta
+      1 index 7 get 1 index mul
+      % found? warpdata delta dx
+      exch 2 index 8 get mul
+      % found? warpdata dx dy
+      exch 2 index 5 get add exch 2 index 6 get add
+      % found? warpdata x y
+      3 2 roll 9 get
+      % found? x y dir
+      4 3 roll
+      % x y dir found?
+      exit
+    } if
+    pop
+  } forall
+  % x y dir found?
+  not { 8.125 pstack quit } if
+} bind def
+
+/dump-char [ 62 118 60 94 ] def
+/dump-2 [ raw-map { dup length string copy } forall ] def
+
+% prev-x prev-y dir -> x y dir
+/one-step-2 {
+  % prev-x prev-y dir
+  dir-vect 1 index get aload pop
+  % prev-x prev-y dir dx dy
+  exch 4 index add exch 3 index add
+  % prev-x prev-y dir new-x new-y
+  2 copy getxy
+  % prev-x prev-y dir new-x new-y new-char
+  dup 32 eq
+  { % prev-x prev-y dir invalid-new-x invalid-new-y new-char
+    pop pop pop 3 copy
+    % prev-x prev-y dir prev-x prev-y prev-dir
+    warpxy
+    % prev-x prev-y dir new-x new-y new-dir
+    3 copy pop getxy
+    % prev-x prev-y dir new-x new-y new-dir new-char
+    dup 32 eq { 6.125 pstack quit } if
+    % prev-x prev-y dir new-x new-y new-dir new-char
+  }
+  { 3 index exch }
+  ifelse
+  % prev-x prev-y dir new-x new-y new-dir new-char
+  dup 46 eq
+  { % prev-x prev-y dir new-x new-y new-dir '.'
+    pop 6 3 roll pop pop pop
+    % new-x new-y new-dir
+  }
+  { % prev-x prev-y dir new-x new-y new-dir new-char
+    dup 35 eq
+    { % prev-x prev-y dir new-x new-y new-dir '#'
+      pop pop pop pop
+      % prev-x prev-y dir
+    }
+    { 7.125 pstack quit }
+    ifelse
+    % x y dir
+  }
+  ifelse
+  % x y dir
+  dump-2 2 index get
+  % x y dir dump-line
+  3 index
+  % x y dir dump-line x
+  dump-char 3 index get
+  % x y dir dump-line x dump-char
+  put
+  % x y dir
+} bind def
+
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+0 0 {
+  % x y
+  2 copy getxy
+  % x y char
+  46 eq { exit } if
+  % x y
+  exch 1 add exch
+  % next-x y
+} loop
+% start-x start-y
+0
+% start-x start-y start-dir
+path {
+  % x y dir instruction
+  dup turn-left-mark  eq { exch 3 add 4 mod exch } if
+  dup turn-right-mark eq { exch 1 add 4 mod exch } if
+  % x y dir instruction
+  dup 0 gt { { one-step-1 } repeat } { pop } ifelse
+  % x y dir
+} forall
+% x y dir
+exch 1000 mul add exch 4 mul add 1004 add
+% result
+15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+
+0 0 {
+  % x y
+  2 copy getxy
+  % x y char
+  46 eq { exit } if
+  % x y
+  exch 1 add exch
+  % next-x y
+} loop
+% start-x start-y
+0
+% start-x start-y start-dir
+path {
+  % x y dir instruction
+  dup turn-left-mark  eq { exch 3 add 4 mod exch } if
+  dup turn-right-mark eq { exch 1 add 4 mod exch } if
+  % x y dir instruction
+  dup 0 gt { { one-step-2 } repeat } { pop } ifelse
+  % x y dir
+} forall
+% x y dir
+exch 1000 mul add exch 4 mul add 1004 add
+% result
+15 string cvs show
+
+%%% dump-2 {
+%%%   stderr exch writestring
+%%%   stderr 10 write
+%%% } forall
+
+
+showpage
+quit
+
