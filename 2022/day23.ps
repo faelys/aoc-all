@@ -1,0 +1,447 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day23.ps <day23.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data [
+  {
+    datafile 300 string readline
+    not { pop exit } if
+  } loop
+] def
+
+/init-coords [
+  0 data {
+    % ... y line
+    0 exch {
+      % ... y x char
+      35 eq
+      { % ... y x
+        2 copy exch 2 array astore
+        % ... y x new-item
+        3 1 roll
+        % ... new-item y x
+      } if
+      % y x
+      1 add
+    } forall
+    % y last-x
+    pop 1 add
+  } forall
+  % last-y
+  pop
+] def
+
+/dir-vect <<
+  0 [ 0 -1]
+  1 [ 0  1]
+  2 [-1  0]
+  3 [ 1  0]
+>> def
+
+/check-vect-list <<
+  0 [[-1 -1] [0 -1] [1 -1]]
+  1 [[-1 1] [0 1] [1 1]]
+  2 [[-1 -1] [-1 0] [-1 1]]
+  3 [[1 -1] [1 0] [1 1]]
+>> def
+
+% coord-array -> min-x min-y max-x max-y
+/minmax {
+  % coord-array
+  dup 0 get aload pop
+  % coord-array x0 y0
+  2 copy
+  % coord-array x0 y0 x0 y0
+  5 4 roll {
+    % prev-min-x prev-min-y prev-max-x prev-max-y item
+    aload pop
+    % prev-min-x prev-min-y prev-max-x prev-max-y x y
+    6 5 roll
+    % prev-min-y prev-max-x prev-max-y x y prev-min-x
+    dup 3 index gt { pop 1 index } if
+    % prev-min-y prev-max-x prev-max-y x y min-x
+    6 5 roll
+    % prev-max-x prev-max-y x y min-x prev-min-y
+    dup 3 index gt { pop 1 index } if
+    % prev-max-x prev-max-y x y min-x min-y
+    6 5 roll
+    % prev-max-y x y min-x min-y prev-max-x
+    dup 5 index lt { pop 3 index } if
+    % prev-max-y x y min-x min-y max-x
+    6 5 roll
+    % x y min-x min-y max-x prev-max-y
+    dup 5 index lt { pop 3 index } if
+    % x y min-x min-y max-x max-y
+    6 4 roll pop pop
+    % min-x min-y max-x max-y
+  } forall
+  % min-x min-y max-x max-y
+} bind def
+
+% coord-array -> coord-dict width
+/to-coord-dict {
+  % coord-array
+  dup minmax
+  % coord-array min-x min-y max-x max-y
+  pop 2 index sub 3 add
+  % coord-array min-x min-y width
+  3 2 roll 1 sub
+  % coord-array min-y width orig-x
+  3 2 roll 1 sub
+  % coord-array width orig-x orig-y
+  4 3 roll
+  % width orig-x orig-y coord-array
+  << 4 1 roll
+    % width mark orig-x orig-y coord-array
+    4 index exch
+    % width mark orig-x orig-y width coord-array
+    {
+      aload pop
+      % ... orig-x orig-y width x y
+      3 index sub 2 index mul 4 index sub add
+      % ... orig-x orig-y width key
+      1
+      % ... orig-x orig-y width key value
+      5 2 roll
+      % ... key value orig-x orig-y width
+    } forall
+    % width mark items orig-x orig-y width
+    pop pop pop
+    % width mark items
+  >>
+  % width coord-dict
+  exch
+} bind def
+
+% coord-dict width ->
+/dump-coord-dict {
+  % coord-dict width
+  0
+  % coord-dict width height
+  2 index {
+    pop
+    % coord-dict width prev-height key
+    2 index idiv
+    % coord-dict width prev-height y
+    2 copy lt { exch } if pop
+    % coord-dict width cur-height
+  } forall
+  % coord-dict width height
+  2 add 1 index mul dup string
+  % coord-dict width size repr
+  0 1 3 index 1 sub {
+    % coord-dict width size repr index
+    1 index exch 46 put
+    % coord-dict width size repr
+  } for
+  % coord-dict width size repr
+  exch pop
+  % coord-dict width repr
+  3 2 roll {
+    pop
+    % width repr key
+    1 index exch 35 put
+    % width repr
+  } forall
+  % width repr
+  0 2 index
+  % width repr 0 width
+  2 index length 1 sub {
+    % width repr offset
+    1 index exch
+    % width repr repr offset
+    3 index getinterval
+    % width repr line
+    stderr exch writestring
+    stderr 10 write
+  } for
+  % width repr
+  pop pop
+} bind def
+
+% coord-dict width time key -> next-key true
+%                           -> false
+/move-next-coord {
+  % coord-dict width time key
+  false 5 1 roll
+  % result coord-dict width time key
+  exch 1 1 index 3 add
+  % result coord-dict width key time 1 time+3
+  {
+    % result coord-dict width key cur-time
+    true
+    % result coord-dict width key cur-time is-valid?
+    1 index 4 mod check-vect-list exch get {
+      aload pop
+      % result coord-dict width key cur-time prev-is-valid? dx dy
+      5 index mul add
+      % result coord-dict width key cur-time prev-is-valid? dkey
+      3 index add
+      % result coord-dict width key cur-time prev-is-valid? key-to-check
+      5 index exch known not and
+      % result coord-dict width key cur-time is-valid?
+      dup not { exit } if
+    } forall
+    % result coord-dict width key cur-time is-valid?
+    {
+      % false coord-dict width key cur-time
+      dup 4 mod dir-vect exch get aload pop
+      % false coord-dict width key cur-time dx dy
+      4 index mul add
+      % false coord-dict width key cur-time dkey
+      2 index add true
+      % false coord-dict width key cur-time next-key true
+      7 2 roll 5 4 roll pop pop
+      % next-key true coord-dict width key
+      exit
+    } if
+    % result coord-dict width key cur-time
+    pop
+    % result coord-dict width key
+  } for
+  % result coord-dict width key
+  pop pop pop
+  % result
+} bind def
+
+/neighbor-list [
+  [-1 -1] [0 -1] [1 -1]
+  [-1  0]        [1  0]
+  [-1  1] [0  1] [1  1]
+] def
+
+% coord-dict width time key -> next-key true
+%                           -> false
+/single-next-coord {
+  false
+  % coord-dict width time key has-neighbor?
+  neighbor-list {
+    aload pop
+    % coord-dict width time key prev-has-neighbor? dx dy
+    5 index mul add
+    % coord-dict width time key prev-has-neighbor? dkey
+    2 index add
+    % coord-dict width time key prev-has-neighbor? neighbor-key
+    5 index exch known or
+    % coord-dict width time key has-neighbor?
+    dup { exit } if
+  } forall
+  % coord-dict width time key has-neighbor?
+  { move-next-coord }
+  { pop pop pop pop false }
+  ifelse
+} bind def
+
+% coord-dict width time -> next-coord-dict changed?
+/next-coord-dict {
+  % coord-dict width time
+  2 index length dict
+  % coord-dict width time next-coord-counts
+  3 index {
+    pop
+    % coord-dict width time next-coord-counts key
+    4 index 4 index 4 index 4 3 roll single-next-coord
+    {
+      % coord-dict width time next-coord-counts next-key
+      2 copy known
+      { 2 copy get 1 add
+        % coord-dict width time next-coord-counts next-key updated-count
+        2 index 3 1 roll put
+        % coord-dict width time updated-next-coord-counts
+      }
+      { % coord-dict width time next-coord-counts next-key
+        1 index exch 1 put
+        % coord-dict width time updated-next-coord-counts
+      }
+      ifelse
+    } if
+    % coord-dict width time next-coord-counts
+  } forall
+  % coord-dict width time next-coord-counts
+  3 index length dict false 6 2 roll
+  % next-coord-dict changed? coord-dict width time next-coord-counts
+  3 index {
+    pop
+    % next-coord-dict changed? coord-dict width time next-coord-counts key
+    4 index 4 index 4 index 3 index single-next-coord
+    {
+      % next-coord-dict changed? coord-dict width time next-coord-counts key next-key
+      2 index 1 index get
+      1 le {
+        exch pop
+        % next-coord-dict changed? coord-dict width time next-coord-counts next-key
+        6 5 roll pop true 6 1 roll
+        % next-coord-dict true coord-dict width time next-coord-counts next-key
+      }
+      { pop
+        % next-coord-dict changed? coord-dict width time next-coord-counts key
+      }
+      ifelse
+      % next-coord-dict changed? coord-dict width time next-coord-counts final-key
+    } if
+    % next-coord-dict changed? coord-dict width time next-coord-counts final-key
+    6 index exch 1 put
+    % next-coord-dict changed? coord-dict width time next-coord-counts
+  } forall
+  % next-coord-dict changed? coord-dict width time next-coord-counts
+  pop pop pop pop
+  % next-coord-dict changed?
+} bind def
+
+% coord-dict width -> coord-dict width
+/fix-coord-dict {
+  % coord-dict width
+  false false false
+  % coord-dict width has-x0? has-y0? has-xmax?
+  4 index {
+    pop
+    % coord-dict width prev-has-x0? prev-has-y0? prev-has-xmax? key
+    dup 5 index mod exch
+    % coord-dict width prev-has-x0? prev-has-y0? prev-has-xmax? x key
+    5 index idiv
+    % coord-dict width prev-has-x0? prev-has-y0? prev-has-xmax? x y
+    0 eq 4 3 roll or
+    % coord-dict width prev-has-x0? prev-has-xmax? x has-y0?
+    4 1 roll
+    % coord-dict width has-y0? prev-has-x0? prev-has-xmax? x
+    dup 0 eq 4 3 roll or
+    % coord-dict width has-y0? prev-has-xmax? x has-x0?
+    4 1 roll
+    % coord-dict width has-x0? has-y0? prev-has-xmax? x
+    4 index 1 sub eq or
+    % coord-dict width has-x0? has-y0? has-xmax?
+  } forall
+  % coord-dict width has-x0? has-y0? has-xmax?
+  exch { 1 } { 0 } ifelse
+  % coord-dict width has-x0? has-xmax? dy
+  2 index { 1 } { 0 } ifelse exch
+  % coord-dict width has-x0? has-xmax? dx dy
+  4 index 5 4 roll { 1 add } if 4 3 roll { 1 add } if
+  % coord-dict width dx dy new-width
+  dup 6 1 roll 5 4 roll
+  % new-width width dx dy new-width coord-dict
+  << 6 1 roll
+    % new-width mark width dx dy new-width coord-dict
+    { pop
+      % ... width dx dy new-width key
+      dup 5 index mod exch
+      % ... width dx dy new-width old-x key
+      5 index idiv
+      % ... width dx dy new-width old-x old-y
+      exch 4 index add exch 3 index add
+      % ... width dx dy new-width new-x new-y
+      2 index mul add 1
+      % ... width dx dy new-width new-key 1
+      6 2 roll
+      % ... new-item width dx dy new-width
+    } forall
+    % new-width mark items width dx dy new-width
+    pop pop pop pop
+  >>
+  % new-width new-coord-dict
+  exch
+} bind def
+
+% coord-dict width -> score
+/coord-dict-score {
+  % coord-dict width
+  0 (placeholder) 4 2 roll exch
+  % occupied-count placeholder width coord-dict
+  { pop
+    % occupied-count maybe-minimax width key
+    dup 2 index mod exch 2 index idiv
+    % occupied-count maybe-minimax width x y
+    3 index type /integertype eq
+    { % occupied-count min-x min-y max-x max-y width x y
+      7 6 roll dup 3 index gt { pop 1 index } if
+      % occupied-count min-y max-x max-y width x y min-x
+      7 6 roll dup 3 index gt { pop 1 index } if
+      % occupied-count max-x max-y width x y min-x min-y
+      7 6 roll dup 5 index lt { pop 3 index } if
+      % occupied-count max-y width x y min-x min-y max-x
+      7 6 roll dup 5 index lt { pop 3 index } if
+      % occupied-count width x y min-x min-y max-x max-y
+      7 4 roll pop pop
+      % occupied-count min-x min-y max-x max-y width
+    }
+    { % occupied-count (placeholder) width x y
+      4 3 roll pop
+      % occupied-count width x y
+      2 copy 5 4 roll
+      % occupied-count x y x y width
+    }
+    ifelse
+    % prev-occupied-count min-x min-y max-x max-y width
+    6 5 roll 1 add 6 1 roll
+    % occupied-count min-x min-y max-x max-y width
+  } forall
+  % occupied-count min-x min-y max-x max-y width
+  pop exch 4 1 roll exch
+  % occupied-count max-x min-x max-y min-y
+  sub 1 add 3 1 roll sub 1 add
+  % occupied-count used-width used-height
+  mul exch sub
+  % score
+} bind def
+
+-1 init-coords to-coord-dict
+% prev-time init-coord-dict width
+{
+  % prev-time prev-coord-dict width
+  3 2 roll 1 add
+  % prev-coord-dict width time
+  dup 10 eq {
+    3 copy pop coord-dict-score
+    % prev-coord-dict width time score
+    4 1 roll
+  } if
+  % prev-coord-dict width time
+  3 2 roll 2 index 2 index
+  % width time prev-coord-dict width time
+  next-coord-dict
+  % width time cur-coord-dict changed?
+  not { pop 1 add exch pop exit } if
+  % width time cur-coord-dict
+  3 2 roll
+  % time cur-coord-dict width
+  fix-coord-dict
+  % time next-coord-dict next-width
+} loop
+% answer1 answer2
+exch
+% answer2 answer1
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+15 string cvs show
+
+
+(Second Puzzle: )
+72 664 moveto show
+15 string cvs show
+
+
+showpage
+quit
