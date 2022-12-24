@@ -1,0 +1,224 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day24.ps <day24.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/data [
+  {
+    datafile 200 string readline
+    not { exit } if
+  } loop
+  pop
+] def
+
+/width data 0 get length def
+/starty 0 def
+/endy data length 1 sub def
+
+/init-wind-list [
+  -1 data {
+    % ... prev-y line
+    exch 1 add exch -1 exch
+    % ... y -1 line
+    {
+      % ... y prev-x char
+      exch 1 add exch
+      % ... y x char
+      dup 94 eq { % `^`
+        [ 2 index 4 index 0 -1 ] 4 1 roll
+      } if
+      dup 118 eq { % `v`
+        [ 2 index 4 index 0 1 ] 4 1 roll
+      } if
+      dup 62 eq { % `>`
+        [ 2 index 4 index 1 0 ] 4 1 roll
+      } if
+      dup 60 eq { % `<`
+        [ 2 index 4 index -1 0 ] 4 1 roll
+      } if
+      dup 46 eq { % `.`
+        2 index 0 eq {
+          /startx 2 index def
+        } if
+        2 index endy eq {
+          /endx 2 index def
+        } if
+      } if
+      % ... y x char
+      pop
+    } forall
+    % ... y x
+    pop
+  } forall
+  % ... y
+  pop
+] def
+
+% prev-x prev-y dx dy -> x y dx dy
+/next-wind {
+  % prev-x prev-x dx dy
+  4 2 roll
+  % dx dy prev-x prev-y
+  exch 3 index add exch 2 index add
+  % dx dy tentative-x tentative-y
+  dup 0 eq { pop endy 1 sub } if
+  dup endy eq { pop 1 } if
+  % dx dy tentative-x y
+  exch
+  dup 0 eq { pop width 2 sub } if
+  dup width 1 sub eq { pop 1 } if
+  exch
+  % dx dy x y
+  4 2 roll
+} bind def
+
+% prev-wind-list -> wind-list
+/next-wind-list {
+  % prev-wind-list
+  [ exch
+    % mark prev-wind-list
+    {
+      % ... prev-wind-array
+      aload pop
+      next-wind
+      4 array astore
+      % ... new-wind-array
+    } forall
+  ]
+} bind def
+
+% wind-list -> wind-dict
+/wind-dict {
+  << exch
+     {
+       % ... wind-array
+       aload pop pop pop
+       % ... x y
+       width mul add
+       % ... key
+       1
+     } forall
+  >>
+} bind def
+
+
+% prev-time prev-wind-list prev-pos-dict -> time wind-list pos-dict
+/cycle {
+  % prev-time prev-wind-list pos-dict
+  3 2 roll 1 add 3 1 roll
+  % time prev-wind-list pos-dict
+  exch next-wind-list exch
+  % time wind-list pos-dict
+  1 index wind-dict exch
+  % time wind-list wind-dict pos-dict
+  endy width mul dict exch
+  % time wind-list wind-dict next-pos-dict pos-dict
+  { pop
+    % time wind-list wind-dict next-pos-dict key
+    dup width mod exch width idiv
+    % time wind-list wind-dict next-pos-dict x y
+    movelist { aload pop
+      % time wind-list wind-dict next-pos-dict x y dx dy
+      exch 3 index add exch 2 index add
+      % time wind-list wind-dict next-pos-dict x y next-x next-y
+      true
+      2 index 0 gt and
+% dup { (  true\012) } { (  false\012) } ifelse stderr exch writestring
+      2 index width 1 sub lt and
+      1 index 0 ge and
+      1 index endy le and
+      1 index starty gt 3 index startx eq or and
+      1 index endy lt 3 index endx eq or and
+      % time wind-list wind-dict next-pos-dict x y next-x next-y is-valid?
+      {
+        width mul add
+        % time wind-list wind-dict next-pos-dict x y next-key
+        4 index 1 index known
+        4 index 1 index known or
+        % time wind-list wind-dict next-pos-dict x y next-key is-known?
+        not {
+          % time wind-list wind-dict next-pos-dict x y next-key
+          3 index 1 index 1 put
+        } if
+        % time wind-list wind-dict next-pos-dict x y next-key
+        pop
+      }
+      { pop pop }
+      ifelse
+      % time wind-list wind-dict next-pos-dict x y
+    } forall
+    % time wind-list wind-dict next-pos-dict x y
+    pop pop
+  } forall
+  % time wind-list wind-dict next-pos-dict
+  exch pop
+  % time wind-list next-pos-dict
+} bind def
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+/endkey endy width mul endx add def
+/movelist [[0 0] [0 1] [0 -1] [1 0] [-1 0]] def
+0 init-wind-list << startx 1 >>
+{ % prev-time prev-wind-list pos-dict
+  cycle
+  % time next-wind-list next-pos-dict
+% dup { pop
+%   dup width mod exch width idiv
+%   % time next-wind-list next-pos-dict x y
+%   stderr 5 index 15 string cvs writestring
+%   stderr (: ) writestring
+%   stderr 2 index 15 string cvs writestring
+%   stderr (, ) writestring
+%   stderr 1 index 15 string cvs writestring
+%   stderr 10 write
+%   pop pop
+% } forall
+% stderr (Cycle ) writestring
+% stderr 3 index 15 string cvs writestring
+% stderr (, ) writestring
+% stderr 1 index length 15 string cvs writestring
+% stderr ( states\012) writestring
+% stderr flushfile
+  % time next-wind-list next-pos-dict
+  dup endkey known { exit } if
+  dup length 0 eq { 1.125 pstack quit } if
+} loop
+% time next-wind-list next-pos-dict
+2 index 15 string cvs show
+% time next-wind-list next-pos-dict
+
+(Second Puzzle: )
+72 664 moveto show
+
+% time next-wind-list next-pos-dict
+pop << endkey 1 >>
+{ cycle dup startx known { exit } if } loop
+pop << startx 1 >>
+{ cycle dup endkey known { exit } if } loop
+2 index 15 string cvs show
+
+showpage
+quit
