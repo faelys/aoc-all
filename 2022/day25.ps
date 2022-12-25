@@ -1,0 +1,110 @@
+%!PS
+%
+% Copyright (c) 2022, Natacha Porté
+%
+% Permission to use, copy, modify, and distribute this software for any
+% purpose with or without fee is hereby granted, provided that the above
+% copyright notice and this permission notice appear in all copies.
+%
+% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+%
+% Usage:
+% gs -q- -sDEVICE=png16m -o- day25.ps <day25.txt | display
+
+/datafile (%stdin) (r) file def
+/stderr (%stderr) (w) file def
+
+/char-to-digit <<
+  61 -2
+  45 -1
+  48  0
+  49  1
+  50  2
+>> def
+
+/digit-to-char (=-0123) def
+
+% (num) -> num
+/read-snafu {
+  0 exch {
+    % prev-acc digit-char
+    char-to-digit exch get
+    % prev-acc digit-vaue
+    exch 5 mul add
+    % acc
+  } forall
+  % result
+} bind def
+
+% num -> (num)
+/write-snafu {
+  [ exch 0 exch
+    {
+      % ... carry remainder
+      dup 0 eq { pop exit } if
+      % ... carry remainder
+      dup 5 idiv 3 1 roll
+      % ... next-remainder carry remainder
+      5 mod add
+      % ... next-remainder cur-abs-digit
+      0 exch
+      % ... next-remainder next-carry cur-abs-digit
+      {
+        dup 2 le { exit } if
+        exch 1 add exch 5 sub
+      } loop
+      % ... next-remainder next-carry cur-digit
+      3 1 roll exch
+      % ... cur-digit next-carry next-remainder
+    } loop
+    dup 0 eq { pop } if
+  ]
+  % reverse-digit-array
+  dup length string
+  % reverse-digit-array result
+  0 1 2 index length 1 sub {
+    % reverse-digit-array result index
+    2 index length 1 sub 1 index sub
+    % reverse-digit-array result index reverse-index
+    3 index exch get
+    % reverse-digit-array result index cur-digit
+    2 add digit-to-char exch get
+    % reverse-digit-array result index cur-digit-char
+    2 index 3 1 roll put
+    % reverse-digit-array result
+  } for
+  % reverse-digit-array result
+  exch pop
+} bind def
+
+/data [
+  {
+    datafile 200 string readline
+    not { pop exit } if
+    % line
+    read-snafu
+  } loop
+] def
+
+
+
+/Helvetica 20 selectfont
+
+
+(First Puzzle: )
+72 700 moveto show
+
+0 data { add } forall
+% sum
+write-snafu
+% (sum)
+show
+
+showpage
+quit
